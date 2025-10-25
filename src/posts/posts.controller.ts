@@ -31,8 +31,9 @@ export class PostsController {
     @Query('current') currentPage: string,
     @Query('pageSize') limit: string,
     @Query() qs: string,
+    @User() user: IUser,
   ) {
-    return this.postsService.findAll(+currentPage, +limit, qs);
+    return this.postsService.findAll(+currentPage, +limit, qs, user);
   }
 
   @ResponseMessage('Fetch a post by id')

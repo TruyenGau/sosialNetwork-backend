@@ -19,10 +19,14 @@ export class Post {
   videos: string[];
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
-  userId: User;
+  userId: mongoose.Schema.Types.ObjectId;
 
   @Prop()
   community: string;
+
+  // Bộ đếm like để đọc nhanh
+  @Prop({ default: 0 })
+  likesCount: number;
 
   @Prop({ type: Object })
   createdBy: {

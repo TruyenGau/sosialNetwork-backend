@@ -14,6 +14,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
+import { LikesModule } from './likes/likes.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { PostsModule } from './posts/posts.module';
     DatabasesModule,
     HealthModule,
     PostsModule,
+    LikesModule,
   ],
   controllers: [AppController],
   providers: [

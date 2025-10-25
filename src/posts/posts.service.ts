@@ -5,13 +5,15 @@ import { InjectModel } from '@nestjs/mongoose';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import { PostDocument, Post } from './schemas/post.schemas';
 import { IUser } from 'src/users/users.interface';
-import mongoose from 'mongoose';
+import mongoose, { SortOrder } from 'mongoose';
 import aqp from 'api-query-params';
+import { Like, LikeDocument } from 'src/likes/schemas/like.schemas';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: SoftDeleteModel<PostDocument>,
+    @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
   ) {}
 
   async create(createPostDto: CreatePostDto, user: IUser) {
@@ -32,35 +34,66 @@ export class PostsService {
     return newPost;
   }
 
-  async findAll(currentPage: number, limit: number, qs: string) {
+  async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;
     delete filter.pageSize;
 
-    let offset = (+currentPage - 1) * +limit;
-    let defaultLimit = +limit ? +limit : 10;
+    // (tuỳ bạn) Ẩn post đã xoá mềm
+    // filter.isDeleted = false;
 
-    const totalItems = (await this.postModel.find(filter)).length;
-    const totalPages = Math.ceil(totalItems / defaultLimit);
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const pageSize = Math.max(Number(limit) || 10, 1);
+    const skip = (page - 1) * pageSize;
+    let sortObj: Record<string, SortOrder>;
+    if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
+      // aqp có thể trả về number | 'asc' | 'desc' → ép kiểu về SortOrder
+      sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
+        (acc, [k, v]) => {
+          acc[k] = v as SortOrder;
+          return acc;
+        },
+        {},
+      );
+    } else {
+      sortObj = { createdAt: -1 as SortOrder };
+    }
+    // Đếm & lấy posts song song
+    const [totalItems, posts] = await Promise.all([
+      this.postModel.countDocuments(filter),
+      this.postModel
+        .find(filter)
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSize)
+        .populate(population)
+        .select(projection as any)
+        .lean(), // lean để merge nhanh
+    ]);
 
-    const result = await this.postModel
-      .find(filter)
-      .skip(offset)
-      .limit(defaultLimit)
-      // @ts-ignore: Unreachable code error
-      .sort(sort)
-      .populate(population)
-      .select(projection as any)
-      .exec();
+    // Lấy tất cả like của user hiện tại cho các post trong trang này
+    const postIds = posts.map((p) => p._id);
+    const userLikes = await this.likeModel
+      .find({ postId: { $in: postIds }, userId: user._id, isDeleted: false })
+      .select('postId')
+      .lean();
+
+    const likedSet = new Set(userLikes.map((l) => l.postId.toString()));
+
+    const result = posts.map((p) => ({
+      ...p,
+      likesCount: p.likesCount ?? 0, // tổng số like (giống nhau với mọi user)
+      isLiked: likedSet.has(p._id.toString()), // trạng thái theo user hiện tại
+    }));
 
     return {
       meta: {
-        current: currentPage, //trang hiện tại
-        pageSize: limit, //số lượng bản ghi đã lấy
-        pages: totalPages, //tổng số trang với điều kiện query
-        total: totalItems, // tổng số phần tử (số bản ghi)
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
       },
-      result, //kết quả query
+      result,
     };
   }
 
