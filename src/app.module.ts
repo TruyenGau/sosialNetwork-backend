@@ -15,6 +15,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
+import { CommentsModule } from './comments/comments.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { LikesModule } from './likes/likes.module';
     HealthModule,
     PostsModule,
     LikesModule,
+    CommentsModule,
   ],
   controllers: [AppController],
   providers: [

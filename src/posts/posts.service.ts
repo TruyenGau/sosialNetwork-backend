@@ -1,18 +1,25 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import { PostDocument, Post } from './schemas/post.schemas';
 import { IUser } from 'src/users/users.interface';
-import mongoose, { SortOrder } from 'mongoose';
+import mongoose, { SortOrder, Types } from 'mongoose';
 import aqp from 'api-query-params';
 import { Like, LikeDocument } from 'src/likes/schemas/like.schemas';
+import { Comment, CommentDocument } from 'src/comments/schemas/comment.schema';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: SoftDeleteModel<PostDocument>,
+    @InjectModel(Comment.name)
+    private commentModel: SoftDeleteModel<CommentDocument>,
     @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
   ) {}
 
@@ -98,7 +105,66 @@ export class PostsService {
   }
 
   async findOne(id: string) {
-    return this.postModel.findById(id);
+    const _id = new Types.ObjectId(String(id));
+
+    const post = await this.postModel.findById(_id).lean();
+    if (!post || post.isDeleted) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    // Lấy tất cả comment của post (bỏ comment đã xoá)
+    const comments = await this.commentModel
+      .find({ postId: _id, isDeleted: { $ne: true } })
+      .sort({ createdAt: 1 }) // nền tảng, lát nữa reorder cấp 1
+      .lean();
+
+    // Dựng cây
+    const byId = new Map<string, any>();
+    for (const c of comments) {
+      byId.set(String(c._id), {
+        _id: c._id,
+        postId: c.postId,
+        userId: c.userId,
+        parentId: c.parentId,
+        content: c.content,
+        likesCount: c.likesCount ?? 0,
+        repliesCount: c.repliesCount ?? 0,
+        createdBy: c.createdBy,
+        updatedBy: c.updatedBy,
+        children: [],
+      });
+    }
+
+    const roots: any[] = [];
+    for (const node of byId.values()) {
+      if (node.parentId) {
+        const p = byId.get(String(node.parentId));
+        if (p) p.children.push(node);
+        else roots.push(node); // phòng khi parent bị xoá cứng
+      } else {
+        roots.push(node);
+      }
+    }
+
+    // sort replies asc để đọc mạch
+    const sortAsc = (a: any, b: any) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    const sortDesc = (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+    const sortChildren = (list: any[]) => {
+      list.sort(sortAsc);
+      for (const n of list) if (n.children?.length) sortChildren(n.children);
+    };
+    sortChildren(roots);
+    // cấp 1 thường thích hiển thị mới trước
+    roots.sort(sortDesc);
+
+    // trả về post + comments
+    return {
+      ...post,
+      comments: roots,
+    };
   }
 
   async update(_id: string, updatePostDto: UpdatePostDto, user: IUser) {
