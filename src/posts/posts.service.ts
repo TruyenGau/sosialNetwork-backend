@@ -13,6 +13,7 @@ import mongoose, { SortOrder, Types } from 'mongoose';
 import aqp from 'api-query-params';
 import { Like, LikeDocument } from 'src/likes/schemas/like.schemas';
 import { Comment, CommentDocument } from 'src/comments/schemas/comment.schema';
+import { Community, CommunityDocument } from 'src/communities/schemas/community.schema';
 
 @Injectable()
 export class PostsService {
@@ -20,24 +21,40 @@ export class PostsService {
     @InjectModel(Post.name) private postModel: SoftDeleteModel<PostDocument>,
     @InjectModel(Comment.name)
     private commentModel: SoftDeleteModel<CommentDocument>,
-    @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
-  ) {}
+    @InjectModel(Like.name)
+    private likeModel: SoftDeleteModel<LikeDocument>,
+    @InjectModel(Community.name)
+    private communityModel: SoftDeleteModel<CommunityDocument>,
+  ) { }
 
   async create(createPostDto: CreatePostDto, user: IUser) {
-    const { namePost, content, userId } = createPostDto;
+    const { namePost, content, userId, communityId } = createPostDto;
     const images = createPostDto.images ?? [];
     const videos = createPostDto.videos ?? [];
+
+    if (communityId) {
+      const comm = await this.communityModel.findById(communityId);
+      if (!comm) throw new BadRequestException('Community không tồn tại');
+
+      await this.communityModel.updateOne(
+        { _id: communityId },
+        { $inc: { postsCount: 1 } },
+      );
+    }
+
     const newPost = await this.postModel.create({
       namePost,
       content,
       images,
       videos,
       userId,
+      communityId,
       createdBy: {
         _id: user._id,
         email: user.email,
       },
     });
+
     return newPost;
   }
 
@@ -46,15 +63,12 @@ export class PostsService {
     delete filter.current;
     delete filter.pageSize;
 
-    // (tuỳ bạn) Ẩn post đã xoá mềm
-    // filter.isDeleted = false;
-
     const page = Math.max(Number(currentPage) || 1, 1);
     const pageSize = Math.max(Number(limit) || 10, 1);
     const skip = (page - 1) * pageSize;
+
     let sortObj: Record<string, SortOrder>;
     if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
-      // aqp có thể trả về number | 'asc' | 'desc' → ép kiểu về SortOrder
       sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
         (acc, [k, v]) => {
           acc[k] = v as SortOrder;
@@ -65,7 +79,7 @@ export class PostsService {
     } else {
       sortObj = { createdAt: -1 as SortOrder };
     }
-    // Đếm & lấy posts song song
+
     const [totalItems, posts] = await Promise.all([
       this.postModel.countDocuments(filter),
       this.postModel
@@ -73,12 +87,12 @@ export class PostsService {
         .sort(sortObj)
         .skip(skip)
         .limit(pageSize)
+        .populate('communityId', 'name _id')
         .populate(population)
         .select(projection as any)
-        .lean(), // lean để merge nhanh
+        .lean(),
     ]);
 
-    // Lấy tất cả like của user hiện tại cho các post trong trang này
     const postIds = posts.map((p) => p._id);
     const userLikes = await this.likeModel
       .find({ postId: { $in: postIds }, userId: user._id, isDeleted: false })
@@ -89,8 +103,8 @@ export class PostsService {
 
     const result = posts.map((p) => ({
       ...p,
-      likesCount: p.likesCount ?? 0, // tổng số like (giống nhau với mọi user)
-      isLiked: likedSet.has(p._id.toString()), // trạng thái theo user hiện tại
+      likesCount: p.likesCount ?? 0,
+      isLiked: likedSet.has(p._id.toString()),
     }));
 
     return {
@@ -107,18 +121,22 @@ export class PostsService {
   async findOne(id: string) {
     const _id = new Types.ObjectId(String(id));
 
-    const post = await this.postModel.findById(_id).lean();
+    const post = await this.postModel
+      .findById(_id)
+      .populate('communityId', 'name _id')
+      .lean();
+
     if (!post || post.isDeleted) {
       throw new NotFoundException('Post không tồn tại');
     }
 
-    // Lấy tất cả comment của post (bỏ comment đã xoá)
+    // ✅ Lấy tất cả comment của post
     const comments = await this.commentModel
       .find({ postId: _id, isDeleted: { $ne: true } })
-      .sort({ createdAt: 1 }) // nền tảng, lát nữa reorder cấp 1
+      .sort({ createdAt: 1 })
       .lean();
 
-    // Dựng cây
+    // Dựng cây bình luận
     const byId = new Map<string, any>();
     for (const c of comments) {
       byId.set(String(c._id), {
@@ -140,13 +158,12 @@ export class PostsService {
       if (node.parentId) {
         const p = byId.get(String(node.parentId));
         if (p) p.children.push(node);
-        else roots.push(node); // phòng khi parent bị xoá cứng
+        else roots.push(node);
       } else {
         roots.push(node);
       }
     }
 
-    // sort replies asc để đọc mạch
     const sortAsc = (a: any, b: any) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     const sortDesc = (a: any, b: any) =>
@@ -157,10 +174,8 @@ export class PostsService {
       for (const n of list) if (n.children?.length) sortChildren(n.children);
     };
     sortChildren(roots);
-    // cấp 1 thường thích hiển thị mới trước
     roots.sort(sortDesc);
 
-    // trả về post + comments
     return {
       ...post,
       comments: roots,
@@ -171,6 +186,7 @@ export class PostsService {
     if (!mongoose.Types.ObjectId.isValid(_id)) {
       throw new BadRequestException('Not found Post');
     }
+
     const { namePost, content } = updatePostDto;
 
     const updated = await this.postModel.updateOne(
@@ -192,6 +208,10 @@ export class PostsService {
       return 'not found post';
     }
 
+    const post = await this.postModel.findById(id);
+    if (!post) {
+      throw new NotFoundException('Post không tồn tại');
+    }
     await this.postModel.updateOne(
       { _id: id },
       {
@@ -201,6 +221,14 @@ export class PostsService {
         },
       },
     );
+
+    if (post.communityId) {
+      await this.communityModel.updateOne(
+        { _id: post.communityId },
+        { $inc: { postsCount: -1 } },
+      );
+    }
+
     return this.postModel.softDelete({ _id: id });
   }
 }

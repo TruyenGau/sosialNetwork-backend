@@ -30,8 +30,8 @@ export class User {
   @Prop()
   avatar: string;
 
-  @Prop()
-  community: string[];
+  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }], default: [] })
+  communities: mongoose.Schema.Types.ObjectId[];
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
   role: mongoose.Schema.Types.ObjectId;

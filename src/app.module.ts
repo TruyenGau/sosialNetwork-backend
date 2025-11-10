@@ -16,6 +16,7 @@ import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
+import { CommunitiesModule } from './communities/communities.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { CommentsModule } from './comments/comments.module';
     PostsModule,
     LikesModule,
     CommentsModule,
+    CommunitiesModule,
   ],
   controllers: [AppController],
   providers: [
@@ -61,4 +63,4 @@ import { CommentsModule } from './comments/comments.module';
     // },
   ],
 })
-export class AppModule {}
+export class AppModule { }
