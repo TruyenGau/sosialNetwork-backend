@@ -17,6 +17,7 @@ import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
 import { CommunitiesModule } from './communities/communities.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { CommunitiesModule } from './communities/communities.module';
     LikesModule,
     CommentsModule,
     CommunitiesModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
