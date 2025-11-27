@@ -34,7 +34,7 @@ export class AuthService {
   }
 
   async login(user: IUser, response: Response) {
-    const { _id, name, email, role, permissions } = user;
+    const { _id, name, email, role, permissions, avatar, coverPhoto } = user;
     const payload = {
       sub: 'token login',
       iss: 'from server',
@@ -42,6 +42,8 @@ export class AuthService {
       name,
       email,
       role,
+      avatar,
+      coverPhoto,
     };
     const refresh_token = this.createRefreshToken(payload);
     //update token with refresh token
@@ -61,6 +63,8 @@ export class AuthService {
         permissions,
         online: true,
         lastActive: new Date(),
+        avatar,
+        coverPhoto,
       },
     };
   }

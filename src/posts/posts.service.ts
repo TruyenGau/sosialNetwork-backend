@@ -13,6 +13,7 @@ import mongoose, { SortOrder, Types } from 'mongoose';
 import aqp from 'api-query-params';
 import { Like, LikeDocument } from 'src/likes/schemas/like.schemas';
 import { Comment, CommentDocument } from 'src/comments/schemas/comment.schema';
+import { User, UserDocument } from 'src/users/schemas/user.schema';
 
 @Injectable()
 export class PostsService {
@@ -21,6 +22,7 @@ export class PostsService {
     @InjectModel(Comment.name)
     private commentModel: SoftDeleteModel<CommentDocument>,
     @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
+    @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
   ) {}
 
   async create(createPostDto: CreatePostDto, user: IUser) {
@@ -75,7 +77,7 @@ export class PostsService {
         .limit(pageSize)
         .populate({
           path: 'userId', // Tên field trong Schema Post
-          select: 'name', // Lấy name thêm vào
+          select: 'name avatar', // Lấy name thêm vào
         })
         .select(projection as any)
         .lean(), // lean để merge nhanh
@@ -108,77 +110,80 @@ export class PostsService {
   }
 
   async findOne(id: string, user: IUser) {
-  const _id = new Types.ObjectId(String(id));
+    const _id = new Types.ObjectId(String(id));
 
-  const post = await this.postModel.findById(_id).lean();
-  if (!post || post.isDeleted) {
-    throw new NotFoundException('Post không tồn tại');
-  }
-
-  // ===== CHECK USER ĐÃ LIKE POST HAY CHƯA =====
-  const userLike = await this.likeModel.findOne({
-    postId: _id,
-    userId: user._id,
-    isDeleted: false,
-  });
-
-  const isLiked = !!userLike;               // true / false
-  const likesCount = post.likesCount ?? 0;  // tổng số like của post này
-
-  // ===== LẤY COMMENT =====
-  const comments = await this.commentModel
-    .find({ postId: _id, isDeleted: { $ne: true } })
-    .sort({ createdAt: 1 })
-    .lean();
-
-  const byId = new Map<string, any>();
-  for (const c of comments) {
-    byId.set(String(c._id), {
-      _id: c._id,
-      postId: c.postId,
-      userId: c.userId,
-      parentId: c.parentId,
-      content: c.content,
-      likesCount: c.likesCount ?? 0,
-      repliesCount: c.repliesCount ?? 0,
-      createdBy: c.createdBy,
-      updatedBy: c.updatedBy,
-      children: [],
-    });
-  }
-
-  const roots: any[] = [];
-  for (const node of byId.values()) {
-    if (node.parentId) {
-      const p = byId.get(String(node.parentId));
-      if (p) p.children.push(node);
-      else roots.push(node);
-    } else {
-      roots.push(node);
+    const post = await this.postModel.findById(_id).lean();
+    if (!post || post.isDeleted) {
+      throw new NotFoundException('Post không tồn tại');
     }
+
+    // ===== CHECK USER ĐÃ LIKE POST HAY CHƯA =====
+    const userLike = await this.likeModel.findOne({
+      postId: _id,
+      userId: user._id,
+      isDeleted: false,
+    });
+    const author = await this.userModel
+      .findById(post.userId) // Hoặc post.createdBy tuỳ bạn đặt
+      .select('avatar') // Lấy thêm field bạn muốn
+      .lean();
+    const isLiked = !!userLike; // true / false
+    const likesCount = post.likesCount ?? 0; // tổng số like của post này
+
+    // ===== LẤY COMMENT =====
+    const comments = await this.commentModel
+      .find({ postId: _id, isDeleted: { $ne: true } })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const byId = new Map<string, any>();
+    for (const c of comments) {
+      byId.set(String(c._id), {
+        _id: c._id,
+        postId: c.postId,
+        userId: c.userId,
+        parentId: c.parentId,
+        content: c.content,
+        likesCount: c.likesCount ?? 0,
+        repliesCount: c.repliesCount ?? 0,
+        createdBy: c.createdBy,
+        updatedBy: c.updatedBy,
+        children: [],
+      });
+    }
+
+    const roots: any[] = [];
+    for (const node of byId.values()) {
+      if (node.parentId) {
+        const p = byId.get(String(node.parentId));
+        if (p) p.children.push(node);
+        else roots.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    const sortAsc = (a: any, b: any) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    const sortDesc = (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+    const sortChildren = (list: any[]) => {
+      list.sort(sortAsc);
+      for (const n of list) if (n.children?.length) sortChildren(n.children);
+    };
+    sortChildren(roots);
+    roots.sort(sortDesc);
+
+    // ===== RETURN =====
+    return {
+      ...post,
+      likesCount,
+      isLiked,
+      comments: roots,
+      author,
+    };
   }
-
-  const sortAsc = (a: any, b: any) =>
-    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  const sortDesc = (a: any, b: any) =>
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-
-  const sortChildren = (list: any[]) => {
-    list.sort(sortAsc);
-    for (const n of list) if (n.children?.length) sortChildren(n.children);
-  };
-  sortChildren(roots);
-  roots.sort(sortDesc);
-
-  // ===== RETURN =====
-  return {
-    ...post,
-    likesCount,
-    isLiked,
-    comments: roots,
-  };
-}
-
 
   async update(_id: string, updatePostDto: UpdatePostDto, user: IUser) {
     if (!mongoose.Types.ObjectId.isValid(_id)) {

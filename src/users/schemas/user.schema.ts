@@ -31,6 +31,9 @@ export class User {
   avatar: string;
 
   @Prop()
+  coverPhoto: string;
+
+  @Prop()
   type: string;
 
   @Prop()

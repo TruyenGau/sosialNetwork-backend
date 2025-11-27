@@ -2,6 +2,8 @@ export interface IUser {
   _id: string;
   name: string;
   email: string;
+  avatar: string;
+  coverPhoto: string;
   role: {
     _id: string;
     name: string;

@@ -1,3 +1,4 @@
+import { Optional } from '@nestjs/common';
 import {
   ArrayMaxSize,
   IsArray,
@@ -9,8 +10,8 @@ import {
 import mongoose from 'mongoose';
 
 export class CreatePostDto {
-  @IsNotEmpty({ message: 'NamePost không được để trống' })
-  namePost: string;
+  @Optional()
+  namePost?: string;
 
   @IsNotEmpty({ message: 'Content không được để trống' })
   content: string;
