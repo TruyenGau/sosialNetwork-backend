@@ -73,7 +73,10 @@ export class PostsService {
         .sort(sortObj)
         .skip(skip)
         .limit(pageSize)
-        .populate(population)
+        .populate({
+          path: 'userId', // Tên field trong Schema Post
+          select: 'name', // Lấy name thêm vào
+        })
         .select(projection as any)
         .lean(), // lean để merge nhanh
     ]);
@@ -104,68 +107,78 @@ export class PostsService {
     };
   }
 
-  async findOne(id: string) {
-    const _id = new Types.ObjectId(String(id));
+  async findOne(id: string, user: IUser) {
+  const _id = new Types.ObjectId(String(id));
 
-    const post = await this.postModel.findById(_id).lean();
-    if (!post || post.isDeleted) {
-      throw new NotFoundException('Post không tồn tại');
-    }
-
-    // Lấy tất cả comment của post (bỏ comment đã xoá)
-    const comments = await this.commentModel
-      .find({ postId: _id, isDeleted: { $ne: true } })
-      .sort({ createdAt: 1 }) // nền tảng, lát nữa reorder cấp 1
-      .lean();
-
-    // Dựng cây
-    const byId = new Map<string, any>();
-    for (const c of comments) {
-      byId.set(String(c._id), {
-        _id: c._id,
-        postId: c.postId,
-        userId: c.userId,
-        parentId: c.parentId,
-        content: c.content,
-        likesCount: c.likesCount ?? 0,
-        repliesCount: c.repliesCount ?? 0,
-        createdBy: c.createdBy,
-        updatedBy: c.updatedBy,
-        children: [],
-      });
-    }
-
-    const roots: any[] = [];
-    for (const node of byId.values()) {
-      if (node.parentId) {
-        const p = byId.get(String(node.parentId));
-        if (p) p.children.push(node);
-        else roots.push(node); // phòng khi parent bị xoá cứng
-      } else {
-        roots.push(node);
-      }
-    }
-
-    // sort replies asc để đọc mạch
-    const sortAsc = (a: any, b: any) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    const sortDesc = (a: any, b: any) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-
-    const sortChildren = (list: any[]) => {
-      list.sort(sortAsc);
-      for (const n of list) if (n.children?.length) sortChildren(n.children);
-    };
-    sortChildren(roots);
-    // cấp 1 thường thích hiển thị mới trước
-    roots.sort(sortDesc);
-
-    // trả về post + comments
-    return {
-      ...post,
-      comments: roots,
-    };
+  const post = await this.postModel.findById(_id).lean();
+  if (!post || post.isDeleted) {
+    throw new NotFoundException('Post không tồn tại');
   }
+
+  // ===== CHECK USER ĐÃ LIKE POST HAY CHƯA =====
+  const userLike = await this.likeModel.findOne({
+    postId: _id,
+    userId: user._id,
+    isDeleted: false,
+  });
+
+  const isLiked = !!userLike;               // true / false
+  const likesCount = post.likesCount ?? 0;  // tổng số like của post này
+
+  // ===== LẤY COMMENT =====
+  const comments = await this.commentModel
+    .find({ postId: _id, isDeleted: { $ne: true } })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const byId = new Map<string, any>();
+  for (const c of comments) {
+    byId.set(String(c._id), {
+      _id: c._id,
+      postId: c.postId,
+      userId: c.userId,
+      parentId: c.parentId,
+      content: c.content,
+      likesCount: c.likesCount ?? 0,
+      repliesCount: c.repliesCount ?? 0,
+      createdBy: c.createdBy,
+      updatedBy: c.updatedBy,
+      children: [],
+    });
+  }
+
+  const roots: any[] = [];
+  for (const node of byId.values()) {
+    if (node.parentId) {
+      const p = byId.get(String(node.parentId));
+      if (p) p.children.push(node);
+      else roots.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  const sortAsc = (a: any, b: any) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  const sortDesc = (a: any, b: any) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+  const sortChildren = (list: any[]) => {
+    list.sort(sortAsc);
+    for (const n of list) if (n.children?.length) sortChildren(n.children);
+  };
+  sortChildren(roots);
+  roots.sort(sortDesc);
+
+  // ===== RETURN =====
+  return {
+    ...post,
+    likesCount,
+    isLiked,
+    comments: roots,
+  };
+}
+
 
   async update(_id: string, updatePostDto: UpdatePostDto, user: IUser) {
     if (!mongoose.Types.ObjectId.isValid(_id)) {

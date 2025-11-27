@@ -16,6 +16,7 @@ import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
+import { LoginmediaModule } from './loginmedia/loginmedia.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { CommentsModule } from './comments/comments.module';
     PostsModule,
     LikesModule,
     CommentsModule,
+    LoginmediaModule,
   ],
   controllers: [AppController],
   providers: [

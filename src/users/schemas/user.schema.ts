@@ -12,7 +12,7 @@ export class User {
   @Prop()
   name: string;
 
-  @Prop({ required: true })
+  @Prop()
   password: string;
 
   @Prop()
@@ -31,6 +31,9 @@ export class User {
   avatar: string;
 
   @Prop()
+  type: string;
+
+  @Prop()
   community: string[];
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
@@ -38,6 +41,12 @@ export class User {
 
   @Prop()
   refreshToken: string;
+
+  @Prop({ default: false, index: true })
+  online: boolean;
+
+  @Prop({ type: Date, default: null })
+  lastActive: Date;
 
   @Prop({ type: Object })
   createdBy: {
