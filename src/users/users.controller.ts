@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  NotFoundException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -17,7 +18,7 @@ import { ApiTags } from '@nestjs/swagger';
 @ApiTags('user')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   @ResponseMessage('Create a new user')
@@ -38,6 +39,7 @@ export class UsersController {
   ) {
     return this.usersService.findAll(+currentPage, +limit, qs);
   }
+
 
   @Public()
   @ResponseMessage('Fetch user by id')

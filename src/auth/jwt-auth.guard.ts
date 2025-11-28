@@ -22,13 +22,24 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (isPublic) {
       return true;
     }
+
+    const request: Request = context.switchToHttp().getRequest();
+    // Nếu không có header Authorization, lấy từ cookie
+    if (!request.headers.authorization && request.cookies['next-auth.session-token.0']) {
+      request.headers.authorization = `Bearer ${request.cookies['next-auth.session-token.0']}`;
+    }
+
+    // Bây giờ gọi super để Passport đọc token từ headers
     return super.canActivate(context);
   }
 
   handleRequest(err, user, info, context: ExecutionContext) {
     // You can throw an exception based on either "info" or "err" arguments
     const request: Request = context.switchToHttp().getRequest();
-
+    // Lấy token từ cookie nếu không có header Authorization
+    if (!request.headers.authorization && request.cookies['next-auth.session-token.0']) {
+      request.headers.authorization = `Bearer ${request.cookies['next-auth.session-token.0']}`;
+    }
     const isSkipPermission = this.reflector.getAllAndOverride<boolean>(
       IS_PUBLIC_PERMISSION,
       [context.getHandler(), context.getClass()],

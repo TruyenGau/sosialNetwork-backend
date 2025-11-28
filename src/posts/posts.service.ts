@@ -23,7 +23,7 @@ export class PostsService {
     private commentModel: SoftDeleteModel<CommentDocument>,
     @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
-  ) {}
+  ) { }
 
   async create(createPostDto: CreatePostDto, user: IUser) {
     const { namePost, content, userId } = createPostDto;
@@ -43,6 +43,16 @@ export class PostsService {
     return newPost;
   }
 
+  async findByUser(userId: string) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('UserId không hợp lệ');
+    }
+    return this.postModel
+      .find({ userId, isDeleted: { $ne: true } })
+      .sort({ createdAt: -1 })
+      .lean();
+  }
+  
   async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;

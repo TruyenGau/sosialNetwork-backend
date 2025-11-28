@@ -12,12 +12,18 @@ import {
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { Public, ResponseMessage, User } from 'src/auth/decorator/customize';
+import { Public, ResponseMessage, SkipCheckPermission, User } from 'src/auth/decorator/customize';
 import { IUser } from 'src/users/users.interface';
 
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(private readonly postsService: PostsService) { }
+
+  @SkipCheckPermission()
+  @Get('user/:userId')
+  findByUser(@Param('userId') userId: string) {
+    return this.postsService.findByUser(userId);
+  }
 
   @ResponseMessage('Create a new post')
   @Post()
