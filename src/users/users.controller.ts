@@ -11,7 +11,12 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { Public, ResponseMessage, User } from 'src/auth/decorator/customize';
+import {
+  Public,
+  ResponseMessage,
+  SkipCheckPermission,
+  User,
+} from 'src/auth/decorator/customize';
 import { IUser } from './users.interface';
 import { ApiTags } from '@nestjs/swagger';
 @ApiTags('user')
@@ -57,5 +62,12 @@ export class UsersController {
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.usersService.remove(id, user);
+  }
+
+  @SkipCheckPermission()
+  @Public()
+  @Get('birthday/today')
+  async getTodayBirthdays() {
+    return this.usersService.getTodayBirthdays();
   }
 }

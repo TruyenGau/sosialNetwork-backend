@@ -109,6 +109,71 @@ export class PostsService {
     };
   }
 
+  async findAllById(
+    currentPage: number,
+    limit: number,
+    qs: string,
+    userId: string, // ← nhận userId từ controller
+  ) {
+    const { filter, sort, population, projection } = aqp(qs);
+    delete filter.current;
+    delete filter.pageSize;
+
+    // ⚡ thay user._id thành userId truyền vào
+    filter.userId = userId;
+
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const pageSize = Math.max(Number(limit) || 10, 1);
+    const skip = (page - 1) * pageSize;
+
+    let sortObj: Record<string, SortOrder>;
+    if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
+      sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
+        (acc, [k, v]) => {
+          acc[k] = v as SortOrder;
+          return acc;
+        },
+        {},
+      );
+    } else {
+      sortObj = { createdAt: -1 as SortOrder };
+    }
+
+    const [totalItems, posts] = await Promise.all([
+      this.postModel.countDocuments(filter),
+      this.postModel
+        .find(filter)
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSize)
+        .populate({
+          path: 'userId',
+          select: 'name avatar',
+        })
+        .select(projection as any)
+        .lean(),
+    ]);
+
+    // Lấy danh sách like của user đang login: tuỳ em có muốn giữ không
+    const postIds = posts.map((p) => p._id);
+
+    const result = posts.map((p) => ({
+      ...p,
+      likesCount: p.likesCount ?? 0,
+      isLiked: false, // hoặc xử lý khác tuỳ logic của em
+    }));
+
+    return {
+      meta: {
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
+      },
+      result,
+    };
+  }
+
   async findOne(id: string, user: IUser) {
     const _id = new Types.ObjectId(String(id));
 
@@ -125,7 +190,7 @@ export class PostsService {
     });
     const author = await this.userModel
       .findById(post.userId) // Hoặc post.createdBy tuỳ bạn đặt
-      .select('avatar') // Lấy thêm field bạn muốn
+      .select('avatar name') // Lấy thêm field bạn muốn
       .lean();
     const isLiked = !!userLike; // true / false
     const likesCount = post.likesCount ?? 0; // tổng số like của post này
@@ -133,11 +198,24 @@ export class PostsService {
     // ===== LẤY COMMENT =====
     const comments = await this.commentModel
       .find({ postId: _id, isDeleted: { $ne: true } })
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .lean();
 
+    // ===== LẤY THÔNG TIN USER CỦA COMMENT =====
+    const userIds = [...new Set(comments.map((c) => String(c.userId)))];
+
+    const users = await this.userModel
+      .find({ _id: { $in: userIds } })
+      .select('_id avatar name')
+      .lean();
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    // ===== BUILD MAP COMMENTS =====
     const byId = new Map<string, any>();
     for (const c of comments) {
+      const u = userMap.get(String(c.userId));
+
       byId.set(String(c._id), {
         _id: c._id,
         postId: c.postId,
@@ -148,6 +226,11 @@ export class PostsService {
         repliesCount: c.repliesCount ?? 0,
         createdBy: c.createdBy,
         updatedBy: c.updatedBy,
+        user: {
+          avatar: u?.avatar ?? null,
+          name: u?.name ?? 'Unknown',
+        },
+        createdAt: c.createdAt,
         children: [],
       });
     }

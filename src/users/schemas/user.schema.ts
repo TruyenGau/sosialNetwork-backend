@@ -20,6 +20,14 @@ export class User {
 
   @Prop()
   phoneNumber: string;
+  @Prop()
+  description: string;
+
+  @Prop()
+  school: string;
+
+  @Prop()
+  work: string;
 
   @Prop()
   gender: string; // sex
@@ -50,6 +58,14 @@ export class User {
 
   @Prop({ type: Date, default: null })
   lastActive: Date;
+
+  @Prop({ default: 0 })
+  followersCount: number;
+
+  @Prop({ default: 0 })
+  followingCount: number;
+  @Prop({ type: Date })
+  birthday: Date;
 
   @Prop({ type: Object })
   createdBy: {

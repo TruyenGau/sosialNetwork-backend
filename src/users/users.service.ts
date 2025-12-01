@@ -209,4 +209,31 @@ export class UsersService {
       .findOne({ refreshToken })
       .populate({ path: 'role', select: { name: 1 } });
   };
+
+  async getTodayBirthdays() {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1;
+    const todayDay = today.getDate();
+
+    return this.userModel.aggregate([
+      {
+        $match: {
+          birthday: { $ne: null },
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$birthday' }, todayMonth] },
+              { $eq: [{ $dayOfMonth: '$birthday' }, todayDay] },
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          avatar: 1,
+          birthday: 1,
+        },
+      },
+    ]);
+  }
 }

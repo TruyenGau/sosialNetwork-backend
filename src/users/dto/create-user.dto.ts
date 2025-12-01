@@ -17,9 +17,9 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Name không được để trống' })
   name: string;
 
-  @IsEmail({}, { message: 'Email không đúng định dạng' })
-  @IsNotEmpty({ message: 'Email không được để trống' })
-  email: string;
+  // @IsEmail({}, { message: 'Email không đúng định dạng' })
+  @Optional()
+  email?: string;
 
   @IsNotEmpty({ message: 'Password không được để trống' })
   password: string;
@@ -44,6 +44,18 @@ export class CreateUserDto {
 
   @IsOptional()
   coverPhoto?: string;
+
+  @IsOptional()
+  school?: string;
+
+  @IsOptional()
+  work?: string;
+
+  @IsOptional()
+  description?: string;
+
+  @IsOptional()
+  birthday?: Date;
 }
 
 export class RegisterUserDto {

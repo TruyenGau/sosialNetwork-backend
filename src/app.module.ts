@@ -17,6 +17,8 @@ import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
 import { LoginmediaModule } from './loginmedia/loginmedia.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { FollowsModule } from './follows/follows.module';
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { LoginmediaModule } from './loginmedia/loginmedia.module';
     LikesModule,
     CommentsModule,
     LoginmediaModule,
+    NotificationsModule,
+    FollowsModule,
   ],
   controllers: [AppController],
   providers: [
