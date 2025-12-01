@@ -55,6 +55,10 @@
     "reflect-metadata": "0.1.13",
     "rxjs": "7.2.0",
     "socket.io": "^4.8.1",
+
+
+    "socket.io-client": "^4.8.1",
+
     "soft-delete-plugin-mongoose": "1.0.15"
   },
   "devDependencies": {

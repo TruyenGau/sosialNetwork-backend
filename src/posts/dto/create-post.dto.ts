@@ -32,6 +32,6 @@ export class CreatePostDto {
   userId: mongoose.Schema.Types.ObjectId;
 
   @IsOptional()
-  @IsString()
-  community?: string;
+  @IsMongoId({ message: 'communityId phải là MongoId' })
+  communityId?: mongoose.Schema.Types.ObjectId;
 }

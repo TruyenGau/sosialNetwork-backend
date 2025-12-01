@@ -21,8 +21,8 @@ export class Post {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
   userId: mongoose.Schema.Types.ObjectId;
 
-  @Prop()
-  community: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Community' })
+  communityId: mongoose.Schema.Types.ObjectId;
 
   // Bộ đếm like để đọc nhanh
   @Prop({ default: 0 })

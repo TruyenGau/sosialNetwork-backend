@@ -24,6 +24,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // remove properties not in DTO: TRUE
+      transform: true,  // convert JSON sang class
     }),
   );
 
