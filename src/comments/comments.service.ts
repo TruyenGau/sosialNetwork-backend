@@ -11,6 +11,7 @@ import { Post, PostDocument } from 'src/posts/schemas/post.schemas';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import { IUser } from 'src/users/users.interface';
 import { Types } from 'mongoose';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class CommentsService {
@@ -19,6 +20,7 @@ export class CommentsService {
     private readonly commentModel: SoftDeleteModel<CommentDocument>,
     @InjectModel(Post.name)
     private readonly postModel: SoftDeleteModel<PostDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateCommentDto, user: IUser) {
@@ -28,12 +30,12 @@ export class CommentsService {
       ? new Types.ObjectId(String(dto.parentId))
       : null;
 
-    // đảm bảo Post tồn tại
     const post = await this.postModel.findById(postObjectId).lean();
     if (!post) throw new NotFoundException('Post không tồn tại');
 
     const session = await this.commentModel.db.startSession();
     session.startTransaction();
+
     try {
       const [created] = await this.commentModel.create(
         [
@@ -52,19 +54,18 @@ export class CommentsService {
         { session },
       );
 
-      // +1 tổng comment của post
       await this.postModel.updateOne(
         { _id: postObjectId },
         { $inc: { commentsCount: 1 } },
         { session },
       );
 
-      // Nếu là reply -> +1 repliesCount của parent
       if (parentObjectId) {
         const parent = await this.commentModel
           .findById(parentObjectId)
           .session(session);
         if (!parent) throw new NotFoundException('Comment cha không tồn tại');
+
         await this.commentModel.updateOne(
           { _id: parentObjectId },
           { $inc: { repliesCount: 1 } },
@@ -73,6 +74,17 @@ export class CommentsService {
       }
 
       await session.commitTransaction();
+
+      // ⭐⭐ TẠO THÔNG BÁO (không gửi nếu tự comment bài của mình)
+      if (String(post.userId) !== String(user._id)) {
+        await this.notificationsService.createNotification({
+          userId: new Types.ObjectId(String(post.userId)),
+          fromUserId: new Types.ObjectId(String(user._id)),
+          postId: postObjectId,
+          type: 'COMMENT',
+        });
+      }
+
       return created;
     } catch (e) {
       await session.abortTransaction();

@@ -1,3 +1,4 @@
+import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -6,6 +7,7 @@ import {
   IsNotEmpty,
   IsNotEmptyObject,
   IsObject,
+  IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
@@ -15,9 +17,9 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Name không được để trống' })
   name: string;
 
-  @IsEmail({}, { message: 'Email không đúng định dạng' })
-  @IsNotEmpty({ message: 'Email không được để trống' })
-  email: string;
+  // @IsEmail({}, { message: 'Email không đúng định dạng' })
+  @Optional()
+  email?: string;
 
   @IsNotEmpty({ message: 'Password không được để trống' })
   password: string;
@@ -34,9 +36,26 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Address không được để trống' })
   address: string;
 
-  @IsNotEmpty({ message: 'role không được để trống' })
-  @IsMongoId({ message: 'Role có định dạng là mongo id' })
-  role: mongoose.Schema.Types.ObjectId;
+  @Optional()
+  role?: mongoose.Schema.Types.ObjectId;
+
+  @IsOptional()
+  avatar?: string;
+
+  @IsOptional()
+  coverPhoto?: string;
+
+  @IsOptional()
+  school?: string;
+
+  @IsOptional()
+  work?: string;
+
+  @IsOptional()
+  description?: string;
+
+  @IsOptional()
+  birthday?: Date;
 }
 
 export class RegisterUserDto {

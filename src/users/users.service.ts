@@ -10,7 +10,7 @@ import { IUser } from './users.interface';
 import { User } from 'src/auth/decorator/customize';
 import aqp from 'api-query-params';
 import { Role, RoleDocument } from 'src/roles/schema/role.schema';
-import { USER_ROLE } from 'src/databases/sample';
+import { ADMIN_ROLE, USER_ROLE } from 'src/databases/sample';
 @Injectable()
 export class UsersService {
   constructor(
@@ -97,6 +97,15 @@ export class UsersService {
       .findOne({ email: username })
       .populate({ path: 'role', select: { name: 1 } });
   }
+  // users.service.ts
+  findOneByUserNameAndType(username: string, type?: string) {
+    const query: any = { email: username };
+    if (type) query.type = type; // 👈 THÊM TYPE
+
+    return this.userModel
+      .findOne(query)
+      .populate({ path: 'role', select: { name: 1 } });
+  }
 
   isValidPassword(password: string, hash: string) {
     return compareSync(password, hash);
@@ -157,9 +166,42 @@ export class UsersService {
     });
     return newRegister;
   }
+  async registerMedia(type: string, username: string) {
+    const isExist = await this.userModel.findOne({
+      email: username,
+      type: type, // 🔥 CHECK ĐÚNG CẢ TYPE
+    });
+
+    if (isExist) {
+      throw new BadRequestException(
+        `Tài khoản ${username} đã tồn tại với phương thức ${type}`,
+      );
+    }
+
+    const userRole = await this.roleModel.findOne({ name: ADMIN_ROLE });
+
+    let newRegister = await this.userModel.create({
+      password: '',
+      name: username,
+      email: username,
+      role: userRole?._id,
+      type: type,
+    });
+    return newRegister;
+  }
 
   updateUserToken = async (refreshToken: string, _id: string) => {
-    return await this.userModel.updateOne({ _id }, { refreshToken });
+    const isLogin = !!refreshToken;
+    return this.userModel.updateOne(
+      { _id },
+      {
+        $set: {
+          refreshToken,
+          online: isLogin, // login → true, logout → false
+          lastActive: new Date(), // mốc hoạt động gần nhất
+        },
+      },
+    );
   };
 
   findUserByUser = async (refreshToken: string) => {
@@ -167,4 +209,31 @@ export class UsersService {
       .findOne({ refreshToken })
       .populate({ path: 'role', select: { name: 1 } });
   };
+
+  async getTodayBirthdays() {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1;
+    const todayDay = today.getDate();
+
+    return this.userModel.aggregate([
+      {
+        $match: {
+          birthday: { $ne: null },
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$birthday' }, todayMonth] },
+              { $eq: [{ $dayOfMonth: '$birthday' }, todayDay] },
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          avatar: 1,
+          birthday: 1,
+        },
+      },
+    ]);
+  }
 }

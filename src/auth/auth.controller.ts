@@ -35,6 +35,16 @@ export class AuthController {
     return this.authService.login(req.user, response);
   }
 
+  @Public()
+  @ResponseMessage('User Login')
+  @Post('/social-media')
+  handleGetToken(
+    @Body() body: any,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.authService.loginMedia(body.type, body.username, response);
+  }
+
   @ResponseMessage('Get user information')
   @Get('/account')
   async handleGetAccount(@User() user: IUser) {

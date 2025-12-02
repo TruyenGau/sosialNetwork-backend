@@ -34,7 +34,7 @@ export class AuthService {
   }
 
   async login(user: IUser, response: Response) {
-    const { _id, name, email, role, permissions } = user;
+    const { _id, name, email, role, permissions, avatar, coverPhoto } = user;
     const payload = {
       sub: 'token login',
       iss: 'from server',
@@ -42,6 +42,8 @@ export class AuthService {
       name,
       email,
       role,
+      avatar,
+      coverPhoto,
     };
     const refresh_token = this.createRefreshToken(payload);
     //update token with refresh token
@@ -59,6 +61,61 @@ export class AuthService {
         email,
         role,
         permissions,
+        online: true,
+        lastActive: new Date(),
+        avatar,
+        coverPhoto,
+      },
+    };
+  }
+
+  // auth.service.ts
+  async loginMedia(type: string, username: string, response: Response) {
+    let user: any = await this.usersService.findOneByUserNameAndType(
+      username,
+      type,
+    );
+
+    // Nếu user chưa có -> tạo
+    if (!user) {
+      await this.usersService.registerMedia(type, username);
+      user = await this.usersService.findOneByUserNameAndType(username, type);
+      console.log(user?._id, user?.type);
+    }
+    console.log(user?._id, user?.type);
+    return this.handleLoginToken(user, response); // user kiểu any cũng được
+  }
+
+  private async handleLoginToken(user: any, response: Response) {
+    const payload = {
+      sub: 'token login',
+      iss: 'from server',
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role, // Đã FIX: Không còn gán sai = email
+      type: user.type,
+    };
+
+    const refresh_token = this.createRefreshToken(payload);
+    await this.usersService.updateUserToken(refresh_token, user._id);
+
+    // Set cookie
+    response.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      maxAge: ms(this.configService.get<string>('JWT_REFRESH_EXPIRE')),
+    });
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        type: user.type,
+        online: true,
+        lastActive: new Date(),
       },
     };
   }

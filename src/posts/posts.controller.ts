@@ -12,7 +12,12 @@ import {
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { ResponseMessage, User } from 'src/auth/decorator/customize';
+import {
+  Public,
+  ResponseMessage,
+  SkipCheckPermission,
+  User,
+} from 'src/auth/decorator/customize';
 import { IUser } from 'src/users/users.interface';
 
 @Controller('posts')
@@ -36,10 +41,23 @@ export class PostsController {
     return this.postsService.findAll(+currentPage, +limit, qs, user);
   }
 
+  @SkipCheckPermission()
+  @ResponseMessage('Fetch list post paginate with userId')
+  @Get('/user/:id')
+  findAllById(
+    @Param('id') userId: string,
+    @Query('current') currentPage: string,
+    @Query('pageSize') limit: string,
+    @Query() qs: string,
+    @User() user: IUser,
+  ) {
+    return this.postsService.findAllById(+currentPage, +limit, qs, userId);
+  }
+
   @ResponseMessage('Fetch a post by id')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.postsService.findOne(id);
+  findOne(@Param('id') id: string, @User() user: IUser) {
+    return this.postsService.findOne(id, user);
   }
 
   @ResponseMessage('Update a post by id')

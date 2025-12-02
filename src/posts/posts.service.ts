@@ -13,7 +13,11 @@ import mongoose, { SortOrder, Types } from 'mongoose';
 import aqp from 'api-query-params';
 import { Like, LikeDocument } from 'src/likes/schemas/like.schemas';
 import { Comment, CommentDocument } from 'src/comments/schemas/comment.schema';
-import { Community, CommunityDocument } from 'src/communities/schemas/community.schema';
+import {
+  Community,
+  CommunityDocument,
+} from 'src/communities/schemas/community.schema';
+import { User, UserDocument } from 'src/users/schemas/user.schema';
 
 @Injectable()
 export class PostsService {
@@ -25,6 +29,8 @@ export class PostsService {
     private likeModel: SoftDeleteModel<LikeDocument>,
     @InjectModel(Community.name)
     private communityModel: SoftDeleteModel<CommunityDocument>,
+    @InjectModel(User.name)
+    private userModel: SoftDeleteModel<UserDocument>,
   ) { }
 
   async create(createPostDto: CreatePostDto, user: IUser) {
@@ -87,8 +93,12 @@ export class PostsService {
         .sort(sortObj)
         .skip(skip)
         .limit(pageSize)
-        .populate('communityId', 'name _id')
-        .populate(population)
+        .populate('communityId', 'name _id') // từ nhánh HEAD
+        .populate({
+          path: 'userId', // từ nhánh kia
+          select: 'name avatar',
+        })
+        .populate(population) // vẫn giữ nếu dùng aqp để populate thêm
         .select(projection as any)
         .lean(),
     ]);
@@ -118,7 +128,70 @@ export class PostsService {
     };
   }
 
-  async findOne(id: string) {
+  async findAllById(
+    currentPage: number,
+    limit: number,
+    qs: string,
+    userId: string,
+  ) {
+    const { filter, sort, population, projection } = aqp(qs);
+    delete filter.current;
+    delete filter.pageSize;
+
+    filter.userId = userId;
+
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const pageSize = Math.max(Number(limit) || 10, 1);
+    const skip = (page - 1) * pageSize;
+
+    let sortObj: Record<string, SortOrder>;
+    if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
+      sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
+        (acc, [k, v]) => {
+          acc[k] = v as SortOrder;
+          return acc;
+        },
+        {},
+      );
+    } else {
+      sortObj = { createdAt: -1 as SortOrder };
+    }
+
+    const [totalItems, posts] = await Promise.all([
+      this.postModel.countDocuments(filter),
+      this.postModel
+        .find(filter)
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSize)
+        .populate({
+          path: 'userId',
+          select: 'name avatar',
+        })
+        .select(projection as any)
+        .lean(),
+    ]);
+
+    const postIds = posts.map((p) => p._id);
+
+    const result = posts.map((p) => ({
+      ...p,
+      likesCount: p.likesCount ?? 0,
+      isLiked: false,
+    }));
+
+    return {
+      meta: {
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
+      },
+      result,
+    };
+  }
+
+  async findOne(id: string, user: IUser) {
     const _id = new Types.ObjectId(String(id));
 
     const post = await this.postModel
@@ -130,15 +203,42 @@ export class PostsService {
       throw new NotFoundException('Post không tồn tại');
     }
 
-    // ✅ Lấy tất cả comment của post
-    const comments = await this.commentModel
-      .find({ postId: _id, isDeleted: { $ne: true } })
-      .sort({ createdAt: 1 })
+    // ===== CHECK USER ĐÃ LIKE POST HAY CHƯA =====
+    const userLike = await this.likeModel.findOne({
+      postId: _id,
+      userId: user._id,
+      isDeleted: false,
+    });
+
+    const author = await this.userModel
+      .findById(post.userId)
+      .select('avatar name')
       .lean();
 
-    // Dựng cây bình luận
+    const isLiked = !!userLike;
+    const likesCount = post.likesCount ?? 0;
+
+    // ===== LẤY COMMENT =====
+    const comments = await this.commentModel
+      .find({ postId: _id, isDeleted: { $ne: true } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ===== LẤY THÔNG TIN USER CỦA COMMENT =====
+    const userIds = [...new Set(comments.map((c) => String(c.userId)))];
+
+    const users = await this.userModel
+      .find({ _id: { $in: userIds } })
+      .select('_id avatar name')
+      .lean();
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    // ===== BUILD MAP COMMENTS (cây comment) =====
     const byId = new Map<string, any>();
     for (const c of comments) {
+      const u = userMap.get(String(c.userId));
+
       byId.set(String(c._id), {
         _id: c._id,
         postId: c.postId,
@@ -149,6 +249,11 @@ export class PostsService {
         repliesCount: c.repliesCount ?? 0,
         createdBy: c.createdBy,
         updatedBy: c.updatedBy,
+        user: {
+          avatar: u?.avatar ?? null,
+          name: u?.name ?? 'Unknown',
+        },
+        createdAt: c.createdAt,
         children: [],
       });
     }
@@ -178,7 +283,10 @@ export class PostsService {
 
     return {
       ...post,
+      likesCount,
+      isLiked,
       comments: roots,
+      author,
     };
   }
 

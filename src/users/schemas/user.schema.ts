@@ -12,7 +12,7 @@ export class User {
   @Prop()
   name: string;
 
-  @Prop({ required: true })
+  @Prop()
   password: string;
 
   @Prop()
@@ -20,6 +20,15 @@ export class User {
 
   @Prop()
   phoneNumber: string;
+
+  @Prop()
+  description: string;
+
+  @Prop()
+  school: string;
+
+  @Prop()
+  work: string;
 
   @Prop()
   gender: string; // sex
@@ -30,7 +39,16 @@ export class User {
   @Prop()
   avatar: string;
 
-  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }], default: [] })
+  @Prop()
+  coverPhoto: string;
+
+  @Prop()
+  type: string;
+
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }],
+    default: [],
+  })
   communities: mongoose.Schema.Types.ObjectId[];
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
@@ -38,6 +56,21 @@ export class User {
 
   @Prop()
   refreshToken: string;
+
+  @Prop({ default: false, index: true })
+  online: boolean;
+
+  @Prop({ type: Date, default: null })
+  lastActive: Date;
+
+  @Prop({ default: 0 })
+  followersCount: number;
+
+  @Prop({ default: 0 })
+  followingCount: number;
+
+  @Prop({ type: Date })
+  birthday: Date;
 
   @Prop({ type: Object })
   createdBy: {
@@ -56,6 +89,7 @@ export class User {
     _id: mongoose.Schema.Types.ObjectId;
     email: string;
   };
+
   @Prop()
   createdAt: Date;
 

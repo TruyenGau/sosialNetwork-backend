@@ -18,12 +18,12 @@ import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
 import { CommunitiesModule } from './communities/communities.module';
 import { ChatModule } from './chat/chat.module';
+import { LoginmediaModule } from './loginmedia/loginmedia.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { FollowsModule } from './follows/follows.module';
 
 @Module({
   imports: [
-    // MongooseModule.forRoot(
-    //   'mongodb+srv://levantruyen57:YcXzPhQRI6Rnn9Ej@cluster0.ku4twho.mongodb.net/',
-    // ),
     ThrottlerModule.forRoot({
       ttl: 60,
       limit: 10,
@@ -40,9 +40,8 @@ import { ChatModule } from './chat/chat.module';
       }),
       inject: [ConfigService],
     }),
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
+
     UsersModule,
     AuthModule,
     FilesModule,
@@ -53,16 +52,15 @@ import { ChatModule } from './chat/chat.module';
     PostsModule,
     LikesModule,
     CommentsModule,
+
+    // 🔥 Giữ cả 2 phía:
     CommunitiesModule,
     ChatModule,
+    LoginmediaModule,
+    NotificationsModule,
+    FollowsModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: JwtAuthGuard,
-    // },
-  ],
+  providers: [AppService],
 })
 export class AppModule { }

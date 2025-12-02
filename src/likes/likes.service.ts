@@ -9,12 +9,14 @@ import { Model, Types, ClientSession } from 'mongoose';
 import { Post, PostDocument } from 'src/posts/schemas/post.schemas';
 import { IUser } from 'src/users/users.interface';
 import { Like, LikeDocument } from './schemas/like.schemas';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class LikesService {
   constructor(
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>, // or SoftDeleteModel<PostDocument> tuỳ bạn
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   // --- Helper ---
@@ -34,13 +36,16 @@ export class LikesService {
   // --- LIKE ---
   async likePost(postId: string, user: IUser) {
     this.ensureObjectId(postId);
-    const post = await this.postModel.findById(postId).select('_id likesCount');
+    const post = await this.postModel
+      .findById(postId)
+      .select('_id likesCount userId')
+      .lean();
+
     if (!post) throw new NotFoundException('Post not found');
 
     const existing = await this.likeModel.findOne({ postId, userId: user._id });
 
     if (existing && existing.isDeleted === false) {
-      // Đã like rồi → idempotent
       return { liked: true, likesCount: post.likesCount ?? 0 };
     }
 
@@ -72,6 +77,7 @@ export class LikesService {
             { session },
           );
         }
+
         await this.postModel.updateOne(
           { _id: postId },
           { $inc: { likesCount: 1 } },
@@ -79,9 +85,20 @@ export class LikesService {
         );
       });
 
+      // ⭐⭐ TẠO THÔNG BÁO (không gửi nếu tự like bài của mình)
+      if (String(post.userId) !== String(user._id)) {
+        await this.notificationsService.createNotification({
+          userId: new Types.ObjectId(String(post.userId)), // người nhận thông báo
+          fromUserId: new Types.ObjectId(String(user._id)), // người thực hiện
+          postId: new Types.ObjectId(postId),
+          type: 'LIKE',
+        });
+      }
+
       const { likesCount } = (await this.postModel
         .findById(postId)
         .select('likesCount')) ?? { likesCount: 0 };
+
       return { liked: true, likesCount };
     } finally {
       session.endSession();

@@ -4,6 +4,7 @@ import { LikesController } from './likes.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Post, PostSchema } from 'src/posts/schemas/post.schemas';
 import { Like, LikeSchema } from './schemas/like.schemas';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { Like, LikeSchema } from './schemas/like.schemas';
       { name: Post.name, schema: PostSchema },
       { name: Like.name, schema: LikeSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [LikesController],
   providers: [LikesService],
