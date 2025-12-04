@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Room, RoomType } from './schemas/room.schema';
 import { Message } from './schemas/message.schema';
+import { MessageType } from './schemas/message.schema';
 
 @Injectable()
 export class ChatService {
@@ -48,26 +49,39 @@ export class ChatService {
   async saveMessage(
     senderId: string,
     roomId: string,
-    message: { type: 'text' | 'image' | 'video'; content: string }
+    payload: { type: MessageType | 'text' | 'image' | 'video'; content: string },
   ) {
-    const newMessage = new this.messageModel({
-      sender: senderId,
-      room: roomId,
-      type: message.type,
-      content: message.content,
+    const type: MessageType =
+      (payload.type as MessageType) ?? MessageType.TEXT;
+
+    const msg = await this.messageModel.create({
+      sender: new Types.ObjectId(senderId),  // 👈 lưu đúng kiểu ObjectId
+      room: new Types.ObjectId(roomId),      
+      type,
+      content: payload.content,
     });
-    return newMessage.save();
+
+    return msg.populate('sender', '_id name avatar');
   }
+
 
   async getMessages(roomId: string, page = 1, limit = 30) {
     const skip = (page - 1) * limit;
-    return this.messageModel
-      .find({ room: new Types.ObjectId(roomId) })
-      .populate('sender', 'name email')
-      .sort({ createdAt: 1 })
+
+    const docs = await this.messageModel
+      .find({ room: roomId })                         
+      .sort({ createdAt: -1 })                        
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .populate('sender', '_id name avatar')          
+      .lean()
+      .exec();
+
+    return docs.reverse();
   }
+
+
+
 
   async getUserRooms(userId: string) {
     return this.roomModel

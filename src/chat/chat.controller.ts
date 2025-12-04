@@ -59,6 +59,8 @@ export class ChatController {
     async removeMember(@Body() dto: { roomId: string; memberId: string }) {
         return this.chatService.removeMember(dto.roomId, dto.memberId);
     }
+
+    @SkipCheckPermission()
     @Get('messages/:roomId')
     async getMessages(@Param('roomId') roomId: string, @Query() query: GetMessagesDto) {
         const page = query.page ? parseInt(query.page) : 1;
