@@ -20,6 +20,7 @@ export class User {
 
   @Prop()
   phoneNumber: string;
+
   @Prop()
   description: string;
 
@@ -38,7 +39,6 @@ export class User {
   @Prop()
   avatar: string;
 
-
   @Prop()
   coverPhoto: string;
 
@@ -47,6 +47,7 @@ export class User {
 
    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }], default: [] })
   communities: mongoose.Schema.Types.ObjectId[];
+
 
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
@@ -66,6 +67,7 @@ export class User {
 
   @Prop({ default: 0 })
   followingCount: number;
+
   @Prop({ type: Date })
   birthday: Date;
 
@@ -86,6 +88,7 @@ export class User {
     _id: mongoose.Schema.Types.ObjectId;
     email: string;
   };
+
   @Prop()
   createdAt: Date;
 

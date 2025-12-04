@@ -20,6 +20,7 @@ import {
   CommunityDocument,
 } from 'src/communities/schemas/community.schema';
 
+
 @Injectable()
 export class PostsService {
   constructor(
@@ -27,11 +28,13 @@ export class PostsService {
     @InjectModel(Comment.name)
     private commentModel: SoftDeleteModel<CommentDocument>,
 
+
     @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
     @InjectModel(Community.name)
     private communityModel: SoftDeleteModel<CommunityDocument>,
   ) {}
+
 
   async create(createPostDto: CreatePostDto, user: IUser) {
     const { namePost, content, userId, communityId } = createPostDto;
@@ -64,7 +67,7 @@ export class PostsService {
     return newPost;
   }
 
-  async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
+   async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;
     delete filter.pageSize;
@@ -133,13 +136,12 @@ export class PostsService {
     currentPage: number,
     limit: number,
     qs: string,
-    userId: string, // ← nhận userId từ controller
+    userId: string,
   ) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;
     delete filter.pageSize;
 
-    // ⚡ thay user._id thành userId truyền vào
     filter.userId = userId;
 
     const page = Math.max(Number(currentPage) || 1, 1);
@@ -174,13 +176,12 @@ export class PostsService {
         .lean(),
     ]);
 
-    // Lấy danh sách like của user đang login: tuỳ em có muốn giữ không
     const postIds = posts.map((p) => p._id);
 
     const result = posts.map((p) => ({
       ...p,
       likesCount: p.likesCount ?? 0,
-      isLiked: false, // hoặc xử lý khác tuỳ logic của em
+      isLiked: false,
     }));
 
     return {
@@ -212,12 +213,14 @@ export class PostsService {
       userId: user._id,
       isDeleted: false,
     });
+
     const author = await this.userModel
-      .findById(post.userId) // Hoặc post.createdBy tuỳ bạn đặt
-      .select('avatar name') // Lấy thêm field bạn muốn
+      .findById(post.userId)
+      .select('avatar name')
       .lean();
-    const isLiked = !!userLike; // true / false
-    const likesCount = post.likesCount ?? 0; // tổng số like của post này
+
+    const isLiked = !!userLike;
+    const likesCount = post.likesCount ?? 0;
 
     // ===== LẤY COMMENT =====
     const comments = await this.commentModel
@@ -235,7 +238,7 @@ export class PostsService {
 
     const userMap = new Map(users.map((u) => [String(u._id), u]));
 
-    // ===== BUILD MAP COMMENTS =====
+
     const byId = new Map<string, any>();
     for (const c of comments) {
       const u = userMap.get(String(c.userId));

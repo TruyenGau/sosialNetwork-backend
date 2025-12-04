@@ -16,18 +16,23 @@ import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
+<<<<<<< HEAD
 
 import { LoginmediaModule } from './loginmedia/loginmedia.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FollowsModule } from './follows/follows.module';
 import { CommunitiesModule } from './communities/communities.module';
 import { ChatModule } from './chat/chat.module';
+=======
+import { CommunitiesModule } from './communities/communities.module';
+import { ChatModule } from './chat/chat.module';
+import { LoginmediaModule } from './loginmedia/loginmedia.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { FollowsModule } from './follows/follows.module';
+>>>>>>> dev
 
 @Module({
   imports: [
-    // MongooseModule.forRoot(
-    //   'mongodb+srv://levantruyen57:YcXzPhQRI6Rnn9Ej@cluster0.ku4twho.mongodb.net/',
-    // ),
     ThrottlerModule.forRoot({
       ttl: 60,
       limit: 10,
@@ -44,9 +49,8 @@ import { ChatModule } from './chat/chat.module';
       }),
       inject: [ConfigService],
     }),
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
+
     UsersModule,
     AuthModule,
     FilesModule,
@@ -58,19 +62,22 @@ import { ChatModule } from './chat/chat.module';
     LikesModule,
     CommentsModule,
 
+<<<<<<< HEAD
     LoginmediaModule,
     NotificationsModule,
     FollowsModule,
     CommunitiesModule,
     ChatModule,
+=======
+    // 🔥 Giữ cả 2 phía:
+    CommunitiesModule,
+    ChatModule,
+    LoginmediaModule,
+    NotificationsModule,
+    FollowsModule,
+>>>>>>> dev
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: JwtAuthGuard,
-    // },
-  ],
+  providers: [AppService],
 })
 export class AppModule {}
