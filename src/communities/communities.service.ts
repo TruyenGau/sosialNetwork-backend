@@ -18,14 +18,16 @@ import { User, UserDocument } from 'src/users/schemas/user.schema';
 @Injectable()
 export class CommunitiesService {
   constructor(
-    @InjectModel(Community.name) private communityModel: SoftDeleteModel<CommunityDocument>,
+    @InjectModel(Community.name)
+    private communityModel: SoftDeleteModel<CommunityDocument>,
     @InjectModel(Post.name) private postModel: SoftDeleteModel<PostDocument>,
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
-  ) { }
+  ) {}
 
   async create(dto: CreateCommunityDto, user: IUser) {
     const exist = await this.communityModel.findOne({ name: dto.name });
-    if (exist) throw new BadRequestException(`Community ${dto.name} đã tồn tại`);
+    if (exist)
+      throw new BadRequestException(`Community ${dto.name} đã tồn tại`);
 
     const userId = new mongoose.Types.ObjectId(user._id);
     const newCommunity = await this.communityModel.create({
@@ -68,18 +70,24 @@ export class CommunitiesService {
     ]);
 
     return {
-      meta: { current: page, pageSize, pages: Math.ceil(totalItems / pageSize), total: totalItems },
+      meta: {
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
+      },
       result,
     };
   }
 
   async findOne(id: string) {
-    if (!mongoose.Types.ObjectId.isValid(id)) throw new BadRequestException('Community id không hợp lệ');
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new BadRequestException('Community id không hợp lệ');
     const comm = await this.communityModel
       .findById(id)
       .populate([
         { path: 'members', select: 'name email avatar' },
-        { path: 'admins', select: 'name email' },
+        { path: 'admins', select: 'name email avatar' },
       ])
       .lean();
 
@@ -88,7 +96,9 @@ export class CommunitiesService {
     const posts = await this.postModel
       .find({ communityId: id, isDeleted: { $ne: true } })
       .sort({ createdAt: -1 })
-      .select('namePost content images videos likesCount commentsCount createdAt userId')
+      .select(
+        'namePost content images videos likesCount commentsCount createdAt userId',
+      )
       .lean();
 
     return { ...comm, posts };
@@ -102,7 +112,8 @@ export class CommunitiesService {
     if (!community) throw new NotFoundException('Community không tồn tại');
 
     const isOwner = community.createdBy._id.toString() === user._id.toString();
-    const isAdmin = user.role?.name === 'ADMIN' || user.role?.name === 'SUPER_ADMIN';
+    const isAdmin =
+      user.role?.name === 'ADMIN' || user.role?.name === 'SUPER_ADMIN';
 
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Bạn không có quyền sửa community này');
@@ -120,22 +131,25 @@ export class CommunitiesService {
   }
 
   async remove(id: string, user: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(id)) throw new BadRequestException('Community id không hợp lệ');
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new BadRequestException('Community id không hợp lệ');
     const comm = await this.communityModel.findById(id);
     if (!comm) throw new NotFoundException('Community không tồn tại');
-
 
     if (!comm.admins.map(String).includes(String(user._id))) {
       throw new ForbiddenException('Bạn không có quyền xóa community này');
     }
 
-    await this.communityModel.updateOne({ _id: id }, { deletedBy: { _id: user._id, email: user.email } });
+    await this.communityModel.updateOne(
+      { _id: id },
+      { deletedBy: { _id: user._id, email: user.email } },
+    );
     return this.communityModel.softDelete({ _id: id });
   }
 
-
   async join(id: string, user: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(id)) throw new BadRequestException('Community id không hợp lệ');
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new BadRequestException('Community id không hợp lệ');
     const comm = await this.communityModel.findById(id);
     if (!comm) throw new NotFoundException('Community không tồn tại');
 
@@ -148,32 +162,50 @@ export class CommunitiesService {
     comm.membersCount = (comm.membersCount || 0) + 1;
     await comm.save();
 
-    await this.userModel.updateOne({ _id: uid }, { $addToSet: { communities: comm._id } });
+    await this.userModel.updateOne(
+      { _id: uid },
+      { $addToSet: { communities: comm._id } },
+    );
     return { ok: 1, message: 'Đã tham gia cộng đồng' };
   }
 
-
   async leave(id: string, user: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(id)) throw new BadRequestException('Community id không hợp lệ');
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new BadRequestException('Community id không hợp lệ');
     const comm = await this.communityModel.findById(id);
     if (!comm) throw new NotFoundException('Community không tồn tại');
 
-    if (comm.admins.length === 1 && comm.admins[0].toString() === user._id.toString()) {
-      throw new BadRequestException('Bạn là admin duy nhất, không thể rời khỏi community');
+    if (
+      comm.admins.length === 1 &&
+      comm.admins[0].toString() === user._id.toString()
+    ) {
+      throw new BadRequestException(
+        'Bạn là admin duy nhất, không thể rời khỏi community',
+      );
     }
 
-    comm.members = comm.members.filter((m) => m.toString() !== user._id.toString());
-    comm.admins = comm.admins.filter((a) => a.toString() !== user._id.toString());
+    comm.members = comm.members.filter(
+      (m) => m.toString() !== user._id.toString(),
+    );
+    comm.admins = comm.admins.filter(
+      (a) => a.toString() !== user._id.toString(),
+    );
     comm.membersCount = Math.max((comm.membersCount || 1) - 1, 0);
     await comm.save();
 
-    await this.userModel.updateOne({ _id: user._id }, { $pull: { communities: comm._id } });
+    await this.userModel.updateOne(
+      { _id: user._id },
+      { $pull: { communities: comm._id } },
+    );
 
     return { ok: 1, message: 'Đã rời khỏi community' };
   }
 
   async removeMember(communityId: string, memberId: string, requester: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(memberId))
+    if (
+      !mongoose.Types.ObjectId.isValid(communityId) ||
+      !mongoose.Types.ObjectId.isValid(memberId)
+    )
       throw new BadRequestException('Id không hợp lệ');
 
     const comm = await this.communityModel.findById(communityId);
@@ -188,13 +220,18 @@ export class CommunitiesService {
     comm.membersCount = Math.max((comm.membersCount || 1) - 1, 0);
     await comm.save();
 
-    await this.userModel.updateOne({ _id: memberId }, { $pull: { communities: comm._id } });
+    await this.userModel.updateOne(
+      { _id: memberId },
+      { $pull: { communities: comm._id } },
+    );
     return { ok: 1, message: 'Đã xóa thành viên khỏi community' };
   }
 
-
   async removePost(communityId: string, postId: string, requester: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(postId))
+    if (
+      !mongoose.Types.ObjectId.isValid(communityId) ||
+      !mongoose.Types.ObjectId.isValid(postId)
+    )
       throw new BadRequestException('Id không hợp lệ');
 
     const comm = await this.communityModel.findById(communityId);
@@ -202,7 +239,6 @@ export class CommunitiesService {
 
     const post = await this.postModel.findById(postId);
     if (!post) throw new NotFoundException('Post không tồn tại');
-
 
     if (
       !comm.admins.map(String).includes(String(requester._id)) &&
@@ -215,24 +251,37 @@ export class CommunitiesService {
     return { ok: 1, message: 'Đã xóa bài viết' };
   }
 
-
   async getMembers(id: string, current = 1, pageSize = 20) {
-    if (!mongoose.Types.ObjectId.isValid(id)) throw new BadRequestException('Community id không hợp lệ');
-    const comm = await this.communityModel.findById(id).populate({ path: 'members', select: 'name email avatar' }).lean();
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new BadRequestException('Community id không hợp lệ');
+    const comm = await this.communityModel
+      .findById(id)
+      .populate({ path: 'members', select: 'name email avatar' })
+      .lean();
     if (!comm) throw new NotFoundException('Community không tồn tại');
 
     const start = (current - 1) * pageSize;
     const items = (comm.members || []).slice(start, start + pageSize);
-    return { meta: { current, pageSize, total: comm.members.length, pages: Math.ceil(comm.members.length / pageSize) }, result: items };
+    return {
+      meta: {
+        current,
+        pageSize,
+        total: comm.members.length,
+        pages: Math.ceil(comm.members.length / pageSize),
+      },
+      result: items,
+    };
   }
 
   async addMember(communityId: string, memberId: string, requester: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(memberId))
+    if (
+      !mongoose.Types.ObjectId.isValid(communityId) ||
+      !mongoose.Types.ObjectId.isValid(memberId)
+    )
       throw new BadRequestException('Id không hợp lệ');
 
     const comm = await this.communityModel.findById(communityId);
     if (!comm) throw new NotFoundException('Community không tồn tại');
-
 
     if (!comm.admins.map(String).includes(String(requester._id))) {
       throw new BadRequestException('Bạn không có quyền thêm thành viên');
@@ -240,10 +289,12 @@ export class CommunitiesService {
 
     const added = await this.communityModel.updateOne(
       { _id: communityId },
-      { $addToSet: { members: memberId }, $inc: { membersCount: 1 } }
+      { $addToSet: { members: memberId }, $inc: { membersCount: 1 } },
     );
-    await this.userModel.updateOne({ _id: memberId }, { $addToSet: { communities: comm._id } });
+    await this.userModel.updateOne(
+      { _id: memberId },
+      { $addToSet: { communities: comm._id } },
+    );
     return added;
   }
-
 }
