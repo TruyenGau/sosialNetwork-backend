@@ -16,10 +16,10 @@ export class Message extends Document {
   room: Types.ObjectId;
 
   @Prop({ type: String, enum: MessageType, default: MessageType.TEXT })
-  type: MessageType; 
+  type: MessageType;
 
   @Prop({ type: String, required: true })
-  content: string;  
+  content: string;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   readBy: Types.ObjectId[];
