@@ -197,7 +197,6 @@ export class UsersService {
       {
         $set: {
           refreshToken,
-          online: isLogin, // login → true, logout → false
           lastActive: new Date(), // mốc hoạt động gần nhất
         },
       },
@@ -236,4 +235,17 @@ export class UsersService {
       },
     ]);
   }
+
+    async setOnline(userId: string, online: boolean) {
+    return this.userModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          online,
+          lastActive: new Date(),
+        },
+      },
+    );
+  }
+
 }

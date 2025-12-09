@@ -19,6 +19,12 @@ export class Room extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'Message', default: null })
   lastMessage?: Types.ObjectId;
+
+   @Prop({ type: Boolean, default: false })
+  isPending: boolean; // room này là tin nhắn chờ?
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  pendingFor?: Types.ObjectId | null; // đang chờ user nào duyệt
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);

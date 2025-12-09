@@ -26,22 +26,50 @@ export class ChatController {
     constructor(private chatService: ChatService) { }
 
     @Get('rooms')
+    @SkipCheckPermission()
     async getRooms(@User() user: IUser) {
         return this.chatService.getUserRooms(user._id.toString());
+    }
+
+    @SkipCheckPermission()
+    @Get('pending')
+    async getPending(@User() user: IUser) {
+        return this.chatService.getPendingRequests(user._id.toString());
+    }
+
+    @SkipCheckPermission()
+    @Post('pending/:roomId/accept')
+    async acceptPending(
+        @User() user: IUser,
+        @Param('roomId') roomId: string,
+    ) {
+        return this.chatService.acceptPendingRequest(roomId, user._id.toString());
+    }
+
+    @SkipCheckPermission()
+    @Post('pending/:roomId/reject')
+    async rejectPending(
+        @User() user: IUser,
+        @Param('roomId') roomId: string,
+    ) {
+        return this.chatService.rejectPendingRequest(roomId, user._id.toString());
     }
 
     @Post('create-private')
     @SkipCheckPermission()
     async createPrivate(@User() user: IUser, @Body() dto: CreatePrivateDto) {
         const other = dto.otherUserId;
-        if (other === user._id.toString()) throw new BadRequestException('Cannot create private chat with yourself');
-
-        let room = await this.chatService.findPrivateRoom(user._id.toString(), other);
-        if (!room) {
-            room = await this.chatService.createRoom([user._id.toString(), other], RoomType.PRIVATE);
+        if (other === user._id.toString()) {
+            throw new BadRequestException('Cannot create private chat with yourself');
         }
+
+        const room = await this.chatService.createOrGetPrivateRoom(
+            user._id.toString(),
+            other,
+        );
         return room;
     }
+
 
     @Post('create-group')
     @SkipCheckPermission()

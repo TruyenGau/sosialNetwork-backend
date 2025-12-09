@@ -18,6 +18,7 @@ import {
   CommunityDocument,
 } from 'src/communities/schemas/community.schema';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
+import { SharePostDto } from './dto/share-post.dto';
 
 @Injectable()
 export class PostsService {
@@ -114,6 +115,7 @@ export class PostsService {
     const result = posts.map((p) => ({
       ...p,
       likesCount: p.likesCount ?? 0,
+      sharesCount: p.sharesCount ?? 0,
       isLiked: likedSet.has(p._id.toString()),
     }));
 
@@ -177,6 +179,7 @@ export class PostsService {
     const result = posts.map((p) => ({
       ...p,
       likesCount: p.likesCount ?? 0,
+      sharesCount: p.sharesCount ?? 0,
       isLiked: false,
     }));
 
@@ -217,6 +220,7 @@ export class PostsService {
 
     const isLiked = !!userLike;
     const likesCount = post.likesCount ?? 0;
+    const sharesCount = post.sharesCount ?? 0;
 
     // ===== LẤY COMMENT =====
     const comments = await this.commentModel
@@ -284,6 +288,7 @@ export class PostsService {
     return {
       ...post,
       likesCount,
+      sharesCount,
       isLiked,
       comments: roots,
       author,
@@ -339,4 +344,52 @@ export class PostsService {
 
     return this.postModel.softDelete({ _id: id });
   }
+
+    async sharePost(id: string, user: IUser, body?: SharePostDto) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Not found Post');
+    }
+
+    // Tìm bài gốc
+    const originalPost = await this.postModel.findById(id);
+    if (!originalPost || originalPost.isDeleted) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    // Tiêu đề người share nhập (có thể bỏ trống)
+    const shareTitle = body?.namePost?.trim();
+
+    // Tạo một bài viết mới là bản share
+    const newPost = await this.postModel.create({
+      // Nếu người dùng có nhập tiêu đề share thì dùng, không thì giữ tên bài gốc
+      namePost: shareTitle || originalPost.namePost,
+      content: originalPost.content,
+      images: originalPost.images ?? [],
+      videos: originalPost.videos ?? [],
+      userId: user._id, // người đang share
+      communityId: originalPost.communityId, // share trong cùng community (nếu có)
+      sharedFrom: originalPost._id, // link về bài gốc
+      createdBy: {
+        _id: user._id,
+        email: user.email,
+      },
+    });
+
+    // Tăng bộ đếm shares cho bài gốc
+    await this.postModel.updateOne(
+      { _id: originalPost._id },
+      { $inc: { sharesCount: 1 } },
+    );
+
+    // Nếu post thuộc community thì tăng luôn postsCount (vì có thêm 1 bài share)
+    if (originalPost.communityId) {
+      await this.communityModel.updateOne(
+        { _id: originalPost.communityId },
+        { $inc: { postsCount: 1 } },
+      );
+    }
+
+    return newPost;
+  }
+
 }

@@ -12,6 +12,7 @@ import {
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { SharePostDto } from './dto/share-post.dto';
 import {
   Public,
   ResponseMessage,
@@ -22,7 +23,7 @@ import { IUser } from 'src/users/users.interface';
 
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(private readonly postsService: PostsService) { }
 
   @ResponseMessage('Create a new post')
   @Post()
@@ -75,4 +76,16 @@ export class PostsController {
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.postsService.remove(id, user);
   }
+
+  @ResponseMessage('Share a post')
+  @SkipCheckPermission()
+  @Post(':id/share')
+  sharePost(
+    @Param('id') id: string,
+    @Body() body: SharePostDto,
+    @User() user: IUser,
+  ) {
+    return this.postsService.sharePost(id, user, body);
+  }
+
 }

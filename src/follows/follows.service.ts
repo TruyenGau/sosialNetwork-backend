@@ -9,7 +9,7 @@ export class FollowService {
   constructor(
     @InjectModel(Follow.name) private followModel: Model<Follow>,
     @InjectModel(User.name) private userModel: Model<User>,
-  ) {}
+  ) { }
 
   // FOLLOW
   async follow(followerId: string, followingId: string) {
@@ -63,7 +63,7 @@ export class FollowService {
   async getFollowing(userId: string) {
     return this.followModel
       .find({ follower: userId })
-      .populate('following', 'name avatar');
+      .populate('following', 'name avatar online');
   }
 
   // Lấy danh sách người đang follow tôi

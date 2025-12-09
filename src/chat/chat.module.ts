@@ -7,6 +7,8 @@ import { Room, RoomSchema } from './schemas/room.schema';
 import { Message, MessageSchema } from './schemas/message.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from 'src/users/users.module';
+import { Follow, FollowSchema } from 'src/follows/schemas/follow.schemas';
 
 @Module({
   imports: [
@@ -15,10 +17,12 @@ import { ConfigModule } from '@nestjs/config';
     MongooseModule.forFeature([
       { name: Room.name, schema: RoomSchema },
       { name: Message.name, schema: MessageSchema },
+      { name: Follow.name, schema: FollowSchema },
     ]),
+    UsersModule,
   ],
   providers: [ChatGateway, ChatService],
   controllers: [ChatController],
   exports: [ChatService],
 })
-export class ChatModule {}
+export class ChatModule { }

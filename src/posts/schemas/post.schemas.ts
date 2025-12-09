@@ -31,6 +31,15 @@ export class Post {
   @Prop({ default: 0 })
   commentsCount: number;
 
+  // ====== SHARE ======
+  @Prop({ default: 0 })
+  sharesCount: number;
+
+  // Bài viết này được share lại từ bài nào (nếu có)
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Post' })
+  sharedFrom?: mongoose.Schema.Types.ObjectId;
+
+
   @Prop({ type: Object })
   createdBy: {
     _id: mongoose.Schema.Types.ObjectId;

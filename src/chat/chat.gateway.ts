@@ -12,6 +12,7 @@ import { ChatService } from './chat.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
+import { UsersService } from 'src/users/users.service';
 
 @WebSocketGateway({ namespace: '/chat', cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -23,9 +24,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private chatService: ChatService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private usersService: UsersService,
   ) { }
 
-  handleConnection(socket: Socket) {
+    async handleConnection(socket: Socket) {
     try {
       const auth = socket.handshake.auth || {};
       let token = auth.token || '';
@@ -42,28 +44,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const set = this.userSockets.get(userId) || new Set<string>();
       set.add(socket.id);
       this.userSockets.set(userId, set);
+
       (socket as any).userId = userId;
 
       console.log(`Socket connected: ${socket.id} user:${userId}`);
+
+      // 🔵 USER ONLINE
+      await this.usersService.setOnline(userId, true);
     } catch (err) {
       console.log('Socket auth failed:', err.message);
       socket.disconnect(true);
     }
   }
 
-  handleDisconnect(socket: Socket) {
+
+    async handleDisconnect(socket: Socket) {
     const userId = (socket as any).userId;
     if (!userId) return;
 
     const set = this.userSockets.get(userId);
     if (set) {
       set.delete(socket.id);
-      if (set.size === 0) this.userSockets.delete(userId);
-      else this.userSockets.set(userId, set);
+
+      if (set.size === 0) {
+        // Không còn tab / socket nào của user này nữa → OFFLINE
+        this.userSockets.delete(userId);
+        await this.usersService.setOnline(userId, false);
+      } else {
+        this.userSockets.set(userId, set);
+      }
     }
 
-    console.log(` Socket disconnected: ${socket.id} user:${userId}`);
+    console.log(`Socket disconnected: ${socket.id} user:${userId}`);
   }
+
 
   @SubscribeMessage('send_message')
   async onSendMessage(
