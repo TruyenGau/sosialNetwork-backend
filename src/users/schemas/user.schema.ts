@@ -6,7 +6,7 @@ export type UserDocument = HydratedDocument<User>;
 
 @Schema({ timestamps: true })
 export class User {
-  @Prop({ required: true })
+  @Prop({})
   email: string;
 
   @Prop()
@@ -45,10 +45,11 @@ export class User {
   @Prop()
   type: string;
 
-   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }], default: [] })
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }],
+    default: [],
+  })
   communities: mongoose.Schema.Types.ObjectId[];
-
-
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
   role: mongoose.Schema.Types.ObjectId;

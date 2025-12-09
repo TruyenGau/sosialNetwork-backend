@@ -19,7 +19,8 @@ import {
   Community,
   CommunityDocument,
 } from 'src/communities/schemas/community.schema';
-
+import { Follow, FollowDocument } from 'src/follows/schemas/follow.schemas';
+import axios from 'axios';
 
 @Injectable()
 export class PostsService {
@@ -28,22 +29,54 @@ export class PostsService {
     @InjectModel(Comment.name)
     private commentModel: SoftDeleteModel<CommentDocument>,
 
-
     @InjectModel(Like.name) private likeModel: SoftDeleteModel<LikeDocument>,
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
+    @InjectModel(Follow.name)
+    private followModel: SoftDeleteModel<FollowDocument>,
+
     @InjectModel(Community.name)
     private communityModel: SoftDeleteModel<CommunityDocument>,
   ) {}
-
 
   async create(createPostDto: CreatePostDto, user: IUser) {
     const { namePost, content, userId, communityId } = createPostDto;
     const images = createPostDto.images ?? [];
     const videos = createPostDto.videos ?? [];
 
+    // =======================================
+    // 🔥 1. Gọi API kiểm duyệt nội dung ML
+    // =======================================
+    try {
+      const aiRes = await axios.post('http://127.0.0.1:5000/moderation', {
+        text: content,
+      });
+
+      const toxicScore = aiRes.data.toxic;
+      const threshold = 0.55;
+
+      // Nếu bài viết độc hại → return JSON (không throw)
+      if (toxicScore > threshold) {
+        return {
+          success: false,
+          message: 'Nội dung bài Post chứa từ ngữ độc hại! Vui lòng chỉnh sửa.',
+          toxicScore,
+        };
+      }
+    } catch (error) {
+      console.error('Error calling ML API:', error);
+
+      return {
+        success: false,
+        message: 'Không thể kiểm duyệt nội dung lúc này!',
+      };
+    }
+
+    // =======================================
+    // 🔥 2. Tạo bài viết như cũ
+    // =======================================
     if (communityId) {
       const comm = await this.communityModel.findById(communityId);
-      if (!comm) throw new BadRequestException('Community không tồn tại');
+      if (!comm) return { success: false, message: 'Community không tồn tại' };
 
       await this.communityModel.updateOne(
         { _id: communityId },
@@ -64,13 +97,105 @@ export class PostsService {
       },
     });
 
-    return newPost;
+    return {
+      success: true,
+      post: newPost,
+    };
   }
 
-   async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
+  async findAll(currentPage: number, limit: number, qs: string, user: IUser) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;
     delete filter.pageSize;
+
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const pageSize = Math.max(Number(limit) || 10, 1);
+    const skip = (page - 1) * pageSize;
+
+    // ⭐ lấy danh sách user mà mình follow
+    const following = await this.followModel
+      .find({ follower: user._id })
+      .select('following')
+      .lean();
+
+    const followingIds = following.map((f) => f.following);
+
+    // ⭐ thêm chính mình vào feed
+    const feedUserIds = [...followingIds, user._id];
+
+    // ⭐ CHỈ lấy bài của người mình follow
+    filter.userId = { $in: feedUserIds };
+
+    // ⭐ LOẠI BỎ bài viết thuộc cộng đồng (community)
+    filter.$or = [{ communityId: null }, { communityId: { $exists: false } }];
+
+    // ⭐ xử lý sort
+    let sortObj: Record<string, SortOrder>;
+    if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
+      sortObj = Object.entries(sort).reduce((acc, [k, v]) => {
+        acc[k] = v as SortOrder;
+        return acc;
+      }, {});
+    } else {
+      sortObj = { createdAt: -1 as SortOrder };
+    }
+
+    // ⭐ chạy query song song
+    const [totalItems, posts] = await Promise.all([
+      this.postModel.countDocuments(filter),
+      this.postModel
+        .find(filter)
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSize)
+        .populate({ path: 'userId', select: 'name avatar' })
+        .populate('communityId', 'name _id') // vẫn populate nếu muốn kiểm tra
+        .populate(population)
+        .select(projection as any)
+        .lean(),
+    ]);
+
+    // ⭐ lấy danh sách like
+    const postIds = posts.map((p) => p._id);
+    const userLikes = await this.likeModel
+      .find({ postId: { $in: postIds }, userId: user._id, isDeleted: false })
+      .select('postId')
+      .lean();
+
+    const likedSet = new Set(userLikes.map((l) => l.postId.toString()));
+
+    const result = posts.map((p) => ({
+      ...p,
+      likesCount: p.likesCount ?? 0,
+      isLiked: likedSet.has(p._id.toString()),
+    }));
+
+    return {
+      meta: {
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
+      },
+      result,
+    };
+  }
+
+  async findAllWithGroup(
+    currentPage: number,
+    limit: number,
+    qs: any,
+    user: IUser,
+    groupId: string,
+  ) {
+    const { filter, sort, population, projection } = aqp(qs);
+    delete filter.current;
+    delete filter.pageSize;
+
+    // 👉 Thêm filter theo groupId
+    if (groupId) {
+      filter.communityId = groupId;
+    }
 
     const page = Math.max(Number(currentPage) || 1, 1);
     const pageSize = Math.max(Number(limit) || 10, 1);
@@ -96,10 +221,9 @@ export class PostsService {
         .sort(sortObj)
         .skip(skip)
         .limit(pageSize)
-
         .populate({
-          path: 'userId', // Tên field trong Schema Post
-          select: 'name avatar', // Lấy name thêm vào
+          path: 'userId',
+          select: 'name avatar',
         })
         .populate('communityId', 'name _id')
         .populate(population)
@@ -107,6 +231,7 @@ export class PostsService {
         .lean(),
     ]);
 
+    // LIKE STATUS
     const postIds = posts.map((p) => p._id);
     const userLikes = await this.likeModel
       .find({ postId: { $in: postIds }, userId: user._id, isDeleted: false })
@@ -237,7 +362,6 @@ export class PostsService {
       .lean();
 
     const userMap = new Map(users.map((u) => [String(u._id), u]));
-
 
     const byId = new Map<string, any>();
     for (const c of comments) {

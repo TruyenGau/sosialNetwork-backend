@@ -42,6 +42,25 @@ export class PostsController {
   }
 
   @SkipCheckPermission()
+  @ResponseMessage('Fetch list post with group ')
+  @Get('group/:groupId')
+  findAllWithGroup(
+    @Query('current') currentPage: string,
+    @Query('pageSize') limit: string,
+    @Query() qs: string,
+    @User() user: IUser,
+    @Param('groupId') groupId: string,
+  ) {
+    return this.postsService.findAllWithGroup(
+      +currentPage,
+      +limit,
+      qs,
+      user,
+      groupId,
+    );
+  }
+
+  @SkipCheckPermission()
   @ResponseMessage('Fetch list post paginate with userId')
   @Get('/user/:id')
   findAllById(

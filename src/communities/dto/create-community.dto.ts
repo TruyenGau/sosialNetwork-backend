@@ -1,4 +1,10 @@
-import { IsArray, IsOptional, IsString, IsNotEmpty, IsMongoId } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  IsMongoId,
+} from 'class-validator';
 import mongoose from 'mongoose';
 
 export class CreateCommunityDto {
@@ -13,7 +19,10 @@ export class CreateCommunityDto {
   @IsString()
   avatar?: string;
 
-  
+  @IsOptional()
+  @IsString()
+  coverPhoto?: string;
+
   @IsOptional()
   @IsArray()
   @IsMongoId({ each: true, message: 'adminIds phải là mảng MongoId' })

@@ -34,6 +34,7 @@ export class CommunitiesService {
       name: dto.name,
       description: dto.description,
       avatar: dto.avatar,
+      coverPhoto: dto.coverPhoto,
       admins: [userId],
       members: [userId],
       membersCount: 1,
@@ -48,7 +49,12 @@ export class CommunitiesService {
     return newCommunity;
   }
 
-  async findAll(currentPage = 1, limit = 10, qs = '') {
+  async findAll(
+    currentPage: number,
+    limit: number,
+    qs: string,
+    userId: string,
+  ) {
     const { filter, sort, population, projection } = aqp(qs);
     delete filter.current;
     delete filter.pageSize;
@@ -57,8 +63,9 @@ export class CommunitiesService {
     const pageSize = Math.max(Number(limit) || 10, 1);
     const skip = (page - 1) * pageSize;
 
-    const [totalItems, result] = await Promise.all([
+    const [totalItems, communities] = await Promise.all([
       this.communityModel.countDocuments(filter),
+
       this.communityModel
         .find(filter)
         .sort((sort as Record<string, SortOrder>) ?? { createdAt: -1 })
@@ -68,6 +75,13 @@ export class CommunitiesService {
         .select(projection as any)
         .lean(),
     ]);
+
+    const result = communities.map((com) => ({
+      ...com,
+      isJoined: com.members?.some(
+        (m: any) => m?.toString() === userId.toString(),
+      ),
+    }));
 
     return {
       meta: {
@@ -80,9 +94,39 @@ export class CommunitiesService {
     };
   }
 
-  async findOne(id: string) {
-    if (!mongoose.Types.ObjectId.isValid(id))
+  // async findOne(id: string) {
+  //   if (!mongoose.Types.ObjectId.isValid(id))
+  //     throw new BadRequestException('Community id không hợp lệ');
+  //   const comm = await this.communityModel
+  //     .findById(id)
+  //     .populate([
+  //       { path: 'members', select: 'name email avatar' },
+  //       { path: 'admins', select: 'name email avatar' },
+  //     ])
+  //     .lean();
+
+  //   if (!comm) throw new NotFoundException('Community không tồn tại');
+
+  //   const posts = await this.postModel
+  //     .find({ communityId: id, isDeleted: { $ne: true } })
+  //     .sort({ createdAt: -1 })
+  //     .select(
+  //       'namePost content images videos likesCount commentsCount createdAt userId',
+  //     )
+  //     .populate({
+  //       path: 'userId', // Tên field trong Schema Post
+  //       select: 'name avatar', // Lấy name thêm vào
+  //     })
+  //     .lean();
+
+  //   return { ...comm };
+  // }
+
+  async findOne(id: string, userId: string) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Community id không hợp lệ');
+    }
+
     const comm = await this.communityModel
       .findById(id)
       .populate([
@@ -91,17 +135,19 @@ export class CommunitiesService {
       ])
       .lean();
 
-    if (!comm) throw new NotFoundException('Community không tồn tại');
+    if (!comm) {
+      throw new NotFoundException('Community không tồn tại');
+    }
 
-    const posts = await this.postModel
-      .find({ communityId: id, isDeleted: { $ne: true } })
-      .sort({ createdAt: -1 })
-      .select(
-        'namePost content images videos likesCount commentsCount createdAt userId',
-      )
-      .lean();
+    // ============================
+    const isJoined = comm.members?.some(
+      (m: any) => m._id?.toString() === userId.toString(),
+    );
 
-    return { ...comm, posts };
+    return {
+      ...comm,
+      isJoined: !!isJoined, // ép sang boolean
+    };
   }
 
   async update(id: string, dto: UpdateCommunityDto, user: IUser) {
@@ -296,5 +342,70 @@ export class CommunitiesService {
       { $addToSet: { communities: comm._id } },
     );
     return added;
+  }
+
+  async getListCommunityIdWithPosts(user: IUser) {
+    const userId = new mongoose.Types.ObjectId(user._id);
+
+    const communities = await this.communityModel
+      .find({
+        members: userId,
+        isDeleted: { $ne: true },
+      })
+      .select('_id name avatar')
+      .lean();
+
+    const communityIds = communities.map((c) => c._id);
+
+    if (communityIds.length === 0) {
+      return { communities: [], posts: [] };
+    }
+
+    const posts = await this.postModel
+      .find({
+        communityId: { $in: communityIds },
+        isDeleted: { $ne: true },
+      })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'userId',
+        select: 'name avatar email',
+      })
+      .populate({
+        path: 'communityId',
+        select: 'name avatar',
+      })
+      .lean();
+
+    return {
+      communities,
+      posts,
+      totalPosts: posts.length,
+    };
+  }
+
+  async getMembersWithCommunityId(communityId: string, user: IUser) {
+    if (!mongoose.Types.ObjectId.isValid(communityId)) {
+      throw new BadRequestException('Community id không hợp lệ');
+    }
+
+    const comm = await this.communityModel
+      .findById(communityId)
+      .populate({
+        path: 'members',
+        select: 'name email avatar',
+      })
+      .populate({
+        path: 'admins',
+        select: 'name email avatar',
+      })
+      .lean();
+
+    if (!comm) {
+      throw new NotFoundException('Community không tồn tại');
+    }
+    return {
+      comm,
+    };
   }
 }

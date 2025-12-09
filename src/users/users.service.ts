@@ -11,6 +11,7 @@ import { User } from 'src/auth/decorator/customize';
 import aqp from 'api-query-params';
 import { Role, RoleDocument } from 'src/roles/schema/role.schema';
 import { ADMIN_ROLE, USER_ROLE } from 'src/databases/sample';
+import axios from 'axios';
 @Injectable()
 export class UsersService {
   constructor(
@@ -25,27 +26,24 @@ export class UsersService {
   };
 
   async create(createUserDto: CreateUserDto, @User() user: IUser) {
-    const { name, email, password, age, gender, address, role, phoneNumber } =
-      createUserDto;
-    const isExist = await this.userModel.findOne({ email });
+    const isExist = await this.userModel.findOne({
+      email: createUserDto.email,
+    });
     if (isExist) {
-      throw new BadRequestException(`Email ${email} đã tồn tại `);
+      throw new BadRequestException(`Email ${createUserDto.email} đã tồn tại`);
     }
+
     const hashPassword = this.getHashPassword(createUserDto.password);
-    let newUser = await this.userModel.create({
-      name,
-      email,
+
+    const newUser = await this.userModel.create({
+      ...createUserDto,
       password: hashPassword,
-      age,
-      gender,
-      address,
-      role,
-      phoneNumber,
       createdBy: {
         _id: user?._id,
         email: user?.email,
       },
     });
+
     return newUser;
   }
 
@@ -111,7 +109,8 @@ export class UsersService {
     return compareSync(password, hash);
   }
   async update(updateUserDto: UpdateUserDto, user: IUser) {
-    return await this.userModel.updateOne(
+    // 1. Update thông tin user
+    const result = await this.userModel.updateOne(
       { _id: updateUserDto._id },
       {
         ...updateUserDto,
@@ -121,6 +120,16 @@ export class UsersService {
         },
       },
     );
+
+    // 2. Nếu update thành công → gọi ML server training lại
+    try {
+      await axios.post('http://127.0.0.1:5000/train');
+      console.log('🔥 ML model retrained after user update.');
+    } catch (err) {
+      console.error('❌ ML training failed:', err.message);
+    }
+
+    return result;
   }
 
   async remove(id: string, @User() user: IUser) {
@@ -235,5 +244,13 @@ export class UsersService {
         },
       },
     ]);
+  }
+  async getAllUserML() {
+    const users = await this.userModel
+      .find()
+      .select('name age gender school address  followersCount followingCount')
+      .lean();
+
+    return { users };
   }
 }

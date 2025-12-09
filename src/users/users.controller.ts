@@ -70,4 +70,11 @@ export class UsersController {
   async getTodayBirthdays() {
     return this.usersService.getTodayBirthdays();
   }
+
+  @SkipCheckPermission()
+  @Public()
+  @Get('/ml/users')
+  async getAllUserML() {
+    return this.usersService.getAllUserML();
+  }
 }

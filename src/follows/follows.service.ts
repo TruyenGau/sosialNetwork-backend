@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Follow } from './schemas/follow.schemas';
 import { User } from 'src/users/schemas/user.schema';
 import { Model } from 'mongoose';
+import axios from 'axios';
 
 @Injectable()
 export class FollowService {
@@ -84,18 +85,46 @@ export class FollowService {
     };
   }
   async getSuggestions(userId: string) {
-    // Lấy danh sách người mà tôi đang follow
+    // 1. Gọi server ML lấy danh sách ưu tiên
+    const mlList = await this.getMLRecommendations(userId);
+    if (!mlList.length) return [];
+
+    // 2. Lấy danh sách người mà tôi đang follow
     const following = await this.followModel
       .find({ follower: userId })
       .select('following');
 
     const followingIds = following.map((f) => f.following.toString());
 
-    // Lấy tất cả user trừ chính mình và trừ danh sách đã follow
+    // 3. Lọc ra 2 user phù hợp nhất (không phải mình, và chưa follow)
+    const selectedIds: string[] = [];
+
+    for (const candidateId of mlList) {
+      if (candidateId === userId) continue; // bỏ chính mình
+      if (followingIds.includes(candidateId)) continue; // bỏ người đã follow
+
+      selectedIds.push(candidateId);
+
+      if (selectedIds.length === 2) break; // chỉ lấy 2 người
+    }
+
+    if (!selectedIds.length) return [];
+
+    // 4. Lấy thông tin tên + avatar của 2 người này
     return this.userModel
-      .find({
-        _id: { $nin: [...followingIds, userId] },
-      })
+      .find({ _id: { $in: selectedIds } })
       .select('name avatar');
+  }
+
+  async getMLRecommendations(userId: string) {
+    const apiUrl = `http://127.0.0.1:5000/recommend/${userId}`;
+
+    try {
+      const res = await axios.get(apiUrl);
+      return res.data.recommend;
+    } catch (e) {
+      console.error('ML API Error:', e);
+      return [];
+    }
   }
 }

@@ -15,10 +15,19 @@ export class Community {
   @Prop()
   avatar: string;
 
-  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: User.name }], default: [] })
+  @Prop()
+  coverPhoto: string;
+
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: User.name }],
+    default: [],
+  })
   members: mongoose.Schema.Types.ObjectId[];
 
-  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: User.name }], default: [] })
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: User.name }],
+    default: [],
+  })
   admins: mongoose.Schema.Types.ObjectId[];
 
   @Prop({ default: 0 })

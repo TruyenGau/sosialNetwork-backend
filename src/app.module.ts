@@ -16,20 +16,13 @@ import { HealthModule } from './health/health.module';
 import { PostsModule } from './posts/posts.module';
 import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
-<<<<<<< HEAD
 
 import { LoginmediaModule } from './loginmedia/loginmedia.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FollowsModule } from './follows/follows.module';
 import { CommunitiesModule } from './communities/communities.module';
 import { ChatModule } from './chat/chat.module';
-=======
-import { CommunitiesModule } from './communities/communities.module';
-import { ChatModule } from './chat/chat.module';
-import { LoginmediaModule } from './loginmedia/loginmedia.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { FollowsModule } from './follows/follows.module';
->>>>>>> dev
+import { StoriesModule } from './stories/stories.module';
 
 @Module({
   imports: [
@@ -62,20 +55,12 @@ import { FollowsModule } from './follows/follows.module';
     LikesModule,
     CommentsModule,
 
-<<<<<<< HEAD
     LoginmediaModule,
     NotificationsModule,
     FollowsModule,
     CommunitiesModule,
     ChatModule,
-=======
-    // 🔥 Giữ cả 2 phía:
-    CommunitiesModule,
-    ChatModule,
-    LoginmediaModule,
-    NotificationsModule,
-    FollowsModule,
->>>>>>> dev
+    StoriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
