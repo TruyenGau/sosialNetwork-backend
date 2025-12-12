@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto, RegisterUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
@@ -37,6 +41,7 @@ export class UsersService {
 
     const newUser = await this.userModel.create({
       ...createUserDto,
+      role: createUserDto.role,
       password: hashPassword,
       createdBy: {
         _id: user?._id,
@@ -263,5 +268,31 @@ export class UsersService {
         },
       },
     );
+  }
+
+  async getUserPermissions(userId: string) {
+    const user = await this.userModel
+      .findById(userId)
+      .populate({
+        path: 'role',
+        populate: {
+          path: 'permissions',
+          model: 'Permission',
+        },
+      })
+      .lean();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // ép kiểu an toàn cho role (vì populate trả về object chứ không phải ObjectId)
+    const role: any = user.role || null;
+
+    return {
+      userId: user._id,
+      role: role?.name ?? null,
+      permissions: Array.isArray(role?.permissions) ? role.permissions : [],
+    };
   }
 }

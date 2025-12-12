@@ -77,4 +77,9 @@ export class UsersController {
   async getAllUserML() {
     return this.usersService.getAllUserML();
   }
+  @SkipCheckPermission()
+  @Post('/permissions')
+  async getUserPermissions(@User() user: IUser) {
+    return this.usersService.getUserPermissions(user._id);
+  }
 }

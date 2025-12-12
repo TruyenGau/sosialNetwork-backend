@@ -8,6 +8,7 @@ import {
   Delete,
   Res,
   Query,
+  Put,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -41,6 +42,16 @@ export class PostsController {
     return this.postsService.findAll(+currentPage, +limit, qs, user);
   }
 
+  @SkipCheckPermission()
+  @ResponseMessage('Fetch all post')
+  @Post('/all')
+  findAllPost(
+    @Query('current') currentPage: string,
+    @Query('pageSize') limit: string,
+    @Query() qs: string,
+  ) {
+    return this.postsService.findAllPost(+currentPage, +limit, qs);
+  }
   @SkipCheckPermission()
   @ResponseMessage('Fetch list post with group ')
   @Get('group/:groupId')
@@ -93,5 +104,24 @@ export class PostsController {
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.postsService.remove(id, user);
+  }
+
+  @SkipCheckPermission()
+  @Post('summary')
+  getSummary() {
+    return this.postsService.getTotoal();
+  }
+
+  @SkipCheckPermission()
+  @Post(':postId/save')
+  @ResponseMessage('Toggle save post')
+  async toggleSavePost(@Param('postId') postId: string, @User() user: IUser) {
+    return this.postsService.toggleSavePost(postId, user);
+  }
+  @SkipCheckPermission()
+  @Put('saved')
+  @ResponseMessage('Fetch saved posts')
+  async getSavedPosts(@User() user: IUser) {
+    return this.postsService.getSavedPosts(user);
   }
 }

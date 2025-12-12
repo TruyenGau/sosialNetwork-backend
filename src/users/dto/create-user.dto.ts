@@ -36,8 +36,9 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'Address không được để trống' })
   address: string;
 
-  @Optional()
-  role?: mongoose.Schema.Types.ObjectId;
+  // @Optional()
+  @IsNotEmpty({ message: 'Role không được để trống' })
+  role: mongoose.Schema.Types.ObjectId;
 
   @IsOptional()
   avatar?: string;

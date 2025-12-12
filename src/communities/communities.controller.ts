@@ -19,6 +19,7 @@ import {
 } from 'src/auth/decorator/customize';
 import { IUser } from 'src/users/users.interface';
 import { ApiTags } from '@nestjs/swagger';
+import { InviteMembersDto } from './dto/invite-member.dto';
 
 @ApiTags('community')
 @Controller('communities')
@@ -138,5 +139,43 @@ export class CommunitiesController {
   @Get('/members/:id')
   getMembersWithCommunityId(@Param('id') id: string, @User() user: IUser) {
     return this.communitiesService.getMembersWithCommunityId(id, user);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Get friend community')
+  @Get(':groupId/invite-friends')
+  getInviteFriends(@User() user: IUser, @Param('groupId') groupId: string) {
+    return this.communitiesService.getInviteFriends(user._id, groupId);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('send invite')
+  @Post(':groupId/invite')
+  inviteMembers(
+    @User() user: IUser,
+    @Param('groupId') groupId: string,
+    @Body() dto: InviteMembersDto,
+  ) {
+    return this.communitiesService.inviteMembers(
+      user._id,
+      groupId,
+      dto.userIds,
+    );
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Get invite')
+  @Get('invited/getall')
+  getInvitedGroups(@User() user: IUser) {
+    return this.communitiesService.getInvitedGroups(user._id);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Accept invite')
+  @Post(':groupId/accept-invite')
+  acceptInvite(@User() user: IUser, @Param('groupId') groupId: string) {
+    return this.communitiesService.acceptInvite(user._id, groupId);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Tu choi invite')
+  @Post(':groupId/reject-invite')
+  rejectInvite(@User() user: IUser, @Param('groupId') groupId: string) {
+    return this.communitiesService.rejectInvite(user._id, groupId);
   }
 }

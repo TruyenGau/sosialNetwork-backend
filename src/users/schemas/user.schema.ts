@@ -51,6 +51,12 @@ export class User {
   })
   communities: mongoose.Schema.Types.ObjectId[];
 
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    default: [],
+  })
+  savedPosts: mongoose.Schema.Types.ObjectId[];
+
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Role.name })
   role: mongoose.Schema.Types.ObjectId;
 

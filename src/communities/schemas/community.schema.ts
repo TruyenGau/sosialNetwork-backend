@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import mongoose, { HydratedDocument } from 'mongoose';
+import mongoose, { HydratedDocument, Types } from 'mongoose';
 import { User } from 'src/users/schemas/user.schema';
 
 export type CommunityDocument = HydratedDocument<Community>;
@@ -29,6 +29,12 @@ export class Community {
     default: [],
   })
   admins: mongoose.Schema.Types.ObjectId[];
+
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    default: [],
+  })
+  invitedUsers: Types.ObjectId[];
 
   @Prop({ default: 0 })
   membersCount: number;

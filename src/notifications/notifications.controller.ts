@@ -12,21 +12,21 @@ import { IUser } from 'src/users/users.interface';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  // @Get()
-  // @SkipCheckPermission()
-  // async getAll(@User() user: IUser) {
-  //   return this.notificationsService.getUserNotifications(user._id);
-  // }
+  @Get()
+  @SkipCheckPermission()
+  async getAll(@User() user: IUser) {
+    return this.notificationsService.getUserNotifications(user._id);
+  }
 
-  // @ResponseMessage('Get a new notification')
-  // @Get()
-  // getUserNotifications(@User() user: IUser) {
-  //   return this.notificationsService.getUserNotifications(user._id);
-  // }
+  @ResponseMessage('Get a new notification')
+  @Get()
+  getUserNotifications(@User() user: IUser) {
+    return this.notificationsService.getUserNotifications(user._id);
+  }
 
-  // @SkipCheckPermission()
-  // @Patch(':id/read')
-  // async markRead(@Param('id') id: string) {
-  //   return this.notificationsService.markAsRead(id);
-  // }
+  @SkipCheckPermission()
+  @Patch(':id/read')
+  async markRead(@Param('id') id: string) {
+    return this.notificationsService.markAsRead(id);
+  }
 }

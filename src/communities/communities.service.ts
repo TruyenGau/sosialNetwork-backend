@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import mongoose, { SortOrder } from 'mongoose';
+import mongoose, { SortOrder, Types } from 'mongoose';
 import aqp from 'api-query-params';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import { Community, CommunityDocument } from './schemas/community.schema';
@@ -14,6 +14,7 @@ import { UpdateCommunityDto } from './dto/update-community.dto';
 import { IUser } from 'src/users/users.interface';
 import { Post, PostDocument } from 'src/posts/schemas/post.schemas';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
+import { Follow, FollowDocument } from 'src/follows/schemas/follow.schemas';
 
 @Injectable()
 export class CommunitiesService {
@@ -22,6 +23,8 @@ export class CommunitiesService {
     private communityModel: SoftDeleteModel<CommunityDocument>,
     @InjectModel(Post.name) private postModel: SoftDeleteModel<PostDocument>,
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
+    @InjectModel(Follow.name)
+    private followModel: SoftDeleteModel<FollowDocument>,
   ) {}
 
   async create(dto: CreateCommunityDto, user: IUser) {
@@ -407,5 +410,99 @@ export class CommunitiesService {
     return {
       comm,
     };
+  }
+
+  async getInviteFriends(userId: string, groupId: string) {
+    const group = await this.communityModel.findById(groupId);
+    if (!group) throw new NotFoundException('Group not found');
+
+    // 1. Lấy follow 2 chiều
+    const following = await this.followModel.find({ follower: userId });
+    const followers = await this.followModel.find({ following: userId });
+
+    const followingIds = following.map((f) => f.following.toString());
+    const followerIds = followers.map((f) => f.follower.toString());
+
+    const friendIds = followingIds.filter((id) => followerIds.includes(id));
+
+    // 2. Loại trừ member + invited
+    const excludedIds = [
+      ...group.members.map((id) => id.toString()),
+      ...group.invitedUsers.map((id) => id.toString()),
+    ];
+
+    const inviteIds = friendIds.filter((id) => !excludedIds.includes(id));
+
+    // 3. Lấy info user
+    return this.userModel.find({ _id: { $in: inviteIds } }, '_id name avatar');
+  }
+
+  async inviteMembers(inviterId: string, groupId: string, userIds: string[]) {
+    const group = await this.communityModel.findById(groupId);
+    if (!group) throw new NotFoundException('Group not found');
+
+    // Convert members & invitedUsers sang string để so sánh
+    const memberIds = group.members.map((id) => id.toString());
+    const invitedIds = group.invitedUsers.map((id) => id.toString());
+
+    const newInvites = userIds.filter(
+      (id) => !memberIds.includes(id) && !invitedIds.includes(id),
+    );
+
+    // Convert string → ObjectId trước khi push
+    group.invitedUsers.push(...newInvites.map((id) => new Types.ObjectId(id)));
+
+    await group.save();
+
+    // 🔥 QUERY LẠI GROUP MỚI NHẤT
+    const updatedGroup = await this.communityModel
+      .findById(groupId)
+      .populate('invitedUsers', '_id name avatar')
+      .populate('members', '_id name avatar')
+      .populate('admins', '_id name avatar')
+      .lean();
+
+    return {
+      message: 'Invited successfully',
+      data: updatedGroup,
+    };
+  }
+
+  async getInvitedGroups(userId: string) {
+    return this.communityModel
+      .find({ invitedUsers: userId })
+      .select('_id name avatar membersCount');
+  }
+
+  async acceptInvite(userId: string, groupId: string) {
+    const group = await this.communityModel.findById(groupId);
+    if (!group) throw new NotFoundException('Group not found');
+
+    if (!group.invitedUsers.includes(userId as any))
+      throw new BadRequestException('No invitation');
+
+    group.invitedUsers = group.invitedUsers.filter(
+      (id) => id.toString() !== userId,
+    );
+
+    group.members.push(userId as any);
+    group.membersCount += 1;
+
+    await group.save();
+
+    return { message: 'Joined group successfully' };
+  }
+
+  async rejectInvite(userId: string, groupId: string) {
+    const group = await this.communityModel.findById(groupId);
+    if (!group) throw new NotFoundException('Group not found');
+
+    group.invitedUsers = group.invitedUsers.filter(
+      (id) => id.toString() !== userId,
+    );
+
+    await group.save();
+
+    return { message: 'Invitation rejected' };
   }
 }

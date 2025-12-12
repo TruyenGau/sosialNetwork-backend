@@ -181,6 +181,55 @@ export class PostsService {
     };
   }
 
+  async findAllPost(currentPage: number, limit: number, qs: string) {
+    const { filter, sort, population, projection } = aqp(qs);
+
+    // Xóa các key không liên quan
+    delete filter.current;
+    delete filter.pageSize;
+
+    // Pagination
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const pageSize = Math.max(Number(limit) || 10, 1);
+    const skip = (page - 1) * pageSize;
+
+    // Sort
+    let sortObj: Record<string, SortOrder>;
+    if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
+      sortObj = Object.entries(sort).reduce((acc, [k, v]) => {
+        acc[k] = v as SortOrder;
+        return acc;
+      }, {});
+    } else {
+      sortObj = { createdAt: -1 as SortOrder };
+    }
+
+    // Chạy query song song
+    const [totalItems, posts] = await Promise.all([
+      this.postModel.countDocuments(filter),
+      this.postModel
+        .find(filter)
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSize)
+        .populate({ path: 'userId', select: 'name avatar' })
+        .populate('communityId', 'name avatar _id')
+        .populate(population)
+        .select(projection as any)
+        .lean(),
+    ]);
+
+    return {
+      meta: {
+        current: page,
+        pageSize,
+        pages: Math.ceil(totalItems / pageSize),
+        total: totalItems,
+      },
+      result: posts,
+    };
+  }
+
   async findAllWithGroup(
     currentPage: number,
     limit: number,
@@ -192,7 +241,7 @@ export class PostsService {
     delete filter.current;
     delete filter.pageSize;
 
-    // 👉 Thêm filter theo groupId
+    // 👉 Filter theo group
     if (groupId) {
       filter.communityId = groupId;
     }
@@ -201,6 +250,7 @@ export class PostsService {
     const pageSize = Math.max(Number(limit) || 10, 1);
     const skip = (page - 1) * pageSize;
 
+    // 👉 Sort
     let sortObj: Record<string, SortOrder>;
     if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
       sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
@@ -211,9 +261,10 @@ export class PostsService {
         {},
       );
     } else {
-      sortObj = { createdAt: -1 as SortOrder };
+      sortObj = { createdAt: -1 };
     }
 
+    // 👉 Query song song
     const [totalItems, posts] = await Promise.all([
       this.postModel.countDocuments(filter),
       this.postModel
@@ -221,29 +272,49 @@ export class PostsService {
         .sort(sortObj)
         .skip(skip)
         .limit(pageSize)
-        .populate({
-          path: 'userId',
-          select: 'name avatar',
-        })
+        .populate({ path: 'userId', select: 'name avatar' })
         .populate('communityId', 'name _id')
         .populate(population)
         .select(projection as any)
         .lean(),
     ]);
 
-    // LIKE STATUS
+    /* =========================
+     LIKE STATUS
+  ========================= */
     const postIds = posts.map((p) => p._id);
+
     const userLikes = await this.likeModel
-      .find({ postId: { $in: postIds }, userId: user._id, isDeleted: false })
+      .find({
+        postId: { $in: postIds },
+        userId: user._id,
+        isDeleted: false,
+      })
       .select('postId')
       .lean();
 
     const likedSet = new Set(userLikes.map((l) => l.postId.toString()));
 
+    // =========================
+    // SAVE STATUS (QUERY DB)
+    // =========================
+    const userSaved = await this.userModel
+      .findById(user._id)
+      .select('savedPosts')
+      .lean();
+
+    const savedSet = new Set(
+      (userSaved?.savedPosts || []).map((id) => id.toString()),
+    );
+    /* =========================
+     FINAL RESULT
+  ========================= */
     const result = posts.map((p) => ({
       ...p,
       likesCount: p.likesCount ?? 0,
+      commentsCount: p.commentsCount ?? 0,
       isLiked: likedSet.has(p._id.toString()),
+      isSaved: savedSet.has(p._id.toString()),
     }));
 
     return {
@@ -466,5 +537,136 @@ export class PostsService {
     }
 
     return this.postModel.softDelete({ _id: id });
+  }
+
+  async getTotoal() {
+    // === Tổng số User, Post, Community ===
+    const totalUsers = await this.userModel.countDocuments({});
+    const totalPosts = await this.postModel.countDocuments({});
+    const totalCommunities = await this.communityModel.countDocuments({});
+
+    // === User theo tháng ===
+    const usersByMonth = await this.userModel.aggregate([
+      {
+        $group: {
+          _id: { $month: '$createdAt' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const formattedUsersByMonth = usersByMonth.map((u) => ({
+      month: this.monthName(u._id),
+      count: u.count,
+    }));
+
+    // === Post theo tháng ===
+    const postsByMonth = await this.postModel.aggregate([
+      {
+        $group: {
+          _id: { $month: '$createdAt' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const formattedPostsByMonth = postsByMonth.map((p) => ({
+      month: this.monthName(p._id),
+      count: p.count,
+    }));
+
+    // === Role Distribution ===
+    const roles = await this.userModel.aggregate([
+      {
+        $group: {
+          _id: '$role',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const formattedRoles = roles.map((r) => ({
+      role: r._id,
+      count: r.count,
+    }));
+
+    // === Final result ===
+    return {
+      totals: {
+        users: totalUsers,
+        posts: totalPosts,
+        communities: totalCommunities,
+      },
+      usersByMonth: formattedUsersByMonth,
+      postsByMonth: formattedPostsByMonth,
+      roles: formattedRoles,
+    };
+  }
+  private monthName(month: number): string {
+    return [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ][month - 1];
+  }
+
+  async toggleSavePost(postId: string, user: IUser) {
+    const userId = user._id;
+
+    const existed = await this.userModel.exists({
+      _id: userId,
+      savedPosts: postId,
+    });
+
+    if (existed) {
+      // 👉 Bỏ lưu
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $pull: { savedPosts: postId } },
+      );
+
+      return { isSaved: false };
+    } else {
+      // 👉 Lưu
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $addToSet: { savedPosts: postId } },
+      );
+
+      return { isSaved: true };
+    }
+  }
+
+  async getSavedPosts(user: IUser) {
+    const userDoc = await this.userModel
+      .findById(user._id)
+      .select('savedPosts')
+      .lean();
+
+    if (!userDoc?.savedPosts || userDoc.savedPosts.length === 0) {
+      return [];
+    }
+
+    const posts = await this.postModel
+      .find({ _id: { $in: userDoc.savedPosts } })
+      .populate('userId', 'name avatar')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return posts.map((post) => ({
+      ...post,
+      isSaved: true,
+    }));
   }
 }
