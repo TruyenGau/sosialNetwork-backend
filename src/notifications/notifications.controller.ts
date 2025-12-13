@@ -1,4 +1,11 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  UseGuards,
+  Header,
+} from '@nestjs/common';
 
 import { NotificationsService } from './notifications.service';
 import {
@@ -12,13 +19,8 @@ import { IUser } from 'src/users/users.interface';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @Get()
-  @SkipCheckPermission()
-  async getAll(@User() user: IUser) {
-    return this.notificationsService.getUserNotifications(user._id);
-  }
-
   @ResponseMessage('Get a new notification')
+  @Header('Cache-Control', 'no-store') // 🔥 thêm luôn
   @Get()
   getUserNotifications(@User() user: IUser) {
     return this.notificationsService.getUserNotifications(user._id);

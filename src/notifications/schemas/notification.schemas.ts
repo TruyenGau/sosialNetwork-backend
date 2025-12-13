@@ -12,7 +12,10 @@ export class Notification {
   fromUserId: Types.ObjectId; // người gây ra hành động
 
   @Prop({ required: true })
-  type: 'LIKE' | 'COMMENT';
+  type: 'LIKE' | 'COMMENT' | 'GROUP_INVITE';
+
+  @Prop({ type: Types.ObjectId })
+  groupId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId })
   postId: Types.ObjectId;

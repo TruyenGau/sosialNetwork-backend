@@ -250,23 +250,30 @@ export class PostsService {
     const pageSize = Math.max(Number(limit) || 10, 1);
     const skip = (page - 1) * pageSize;
 
-    // 👉 Sort
-    let sortObj: Record<string, SortOrder>;
+    /* =========================
+      SORT (PIN FIRST)
+  ========================= */
+    let sortObj: Record<string, SortOrder> = {
+      isPinned: -1,
+      pinnedAt: -1,
+    };
+
+    // Nếu client có truyền sort → gắn thêm phía sau
     if (sort && typeof sort === 'object' && Object.keys(sort).length > 0) {
-      sortObj = Object.entries(sort).reduce<Record<string, SortOrder>>(
-        (acc, [k, v]) => {
-          acc[k] = v as SortOrder;
-          return acc;
-        },
-        {},
-      );
+      Object.entries(sort).forEach(([k, v]) => {
+        sortObj[k] = v as SortOrder;
+      });
     } else {
-      sortObj = { createdAt: -1 };
+      // default sort cho bài thường
+      sortObj.createdAt = -1;
     }
 
-    // 👉 Query song song
+    /* =========================
+      QUERY SONG SONG
+  ========================= */
     const [totalItems, posts] = await Promise.all([
       this.postModel.countDocuments(filter),
+
       this.postModel
         .find(filter)
         .sort(sortObj)
@@ -280,7 +287,7 @@ export class PostsService {
     ]);
 
     /* =========================
-     LIKE STATUS
+      LIKE STATUS
   ========================= */
     const postIds = posts.map((p) => p._id);
 
@@ -295,9 +302,9 @@ export class PostsService {
 
     const likedSet = new Set(userLikes.map((l) => l.postId.toString()));
 
-    // =========================
-    // SAVE STATUS (QUERY DB)
-    // =========================
+    /* =========================
+      SAVE STATUS
+  ========================= */
     const userSaved = await this.userModel
       .findById(user._id)
       .select('savedPosts')
@@ -306,8 +313,9 @@ export class PostsService {
     const savedSet = new Set(
       (userSaved?.savedPosts || []).map((id) => id.toString()),
     );
+
     /* =========================
-     FINAL RESULT
+      FINAL RESULT
   ========================= */
     const result = posts.map((p) => ({
       ...p,

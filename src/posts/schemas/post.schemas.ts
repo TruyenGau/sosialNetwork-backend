@@ -59,6 +59,11 @@ export class Post {
 
   @Prop()
   deletedAt: Date;
+  @Prop({ default: false })
+  isPinned: boolean;
+
+  @Prop({ default: null })
+  pinnedAt: Date | null;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);

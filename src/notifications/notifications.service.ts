@@ -20,13 +20,21 @@ export class NotificationsService {
   async createNotification(params: {
     userId: Types.ObjectId;
     fromUserId: Types.ObjectId;
-    postId: Types.ObjectId;
-    type: 'LIKE' | 'COMMENT';
+    type: 'LIKE' | 'COMMENT' | 'GROUP_INVITE';
+    postId?: Types.ObjectId; // ✅ optional
+    groupId?: Types.ObjectId; // ✅ thêm
   }) {
-    // 1. Lưu DB
-    const noti = await this.notificationModel.create(params);
+    // 1️⃣ Lưu DB
+    const noti = await this.notificationModel.create({
+      userId: params.userId,
+      fromUserId: params.fromUserId,
+      type: params.type,
+      postId: params.postId,
+      groupId: params.groupId,
+      isRead: false,
+    });
 
-    // 2. Lấy thông tin user gửi thông báo
+    // 2️⃣ Lấy user gửi thông báo
     const fromUser = await this.notificationModel.db
       .collection('users')
       .findOne(
@@ -34,15 +42,16 @@ export class NotificationsService {
         { projection: { name: 1, avatar: 1 } },
       );
 
-    // 3. Gửi realtime tới FE
+    // 3️⃣ Gửi realtime
     this.gateway.sendNotification(params.userId.toString(), {
       _id: noti._id,
-      type: params.type,
-      postId: params.postId,
+      type: noti.type,
+      postId: noti.postId,
+      groupId: noti.groupId, // ✅ QUAN TRỌNG
       createdAt: noti.createdAt,
       isRead: false,
       fromUserId: {
-        _id: params.fromUserId,
+        _id: fromUser?._id,
         name: fromUser?.name,
         avatar: fromUser?.avatar,
       },

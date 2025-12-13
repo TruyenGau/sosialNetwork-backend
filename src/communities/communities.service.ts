@@ -15,6 +15,8 @@ import { IUser } from 'src/users/users.interface';
 import { Post, PostDocument } from 'src/posts/schemas/post.schemas';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
 import { Follow, FollowDocument } from 'src/follows/schemas/follow.schemas';
+import { NotificationDocument } from 'src/notifications/schemas/notification.schemas';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class CommunitiesService {
@@ -25,6 +27,7 @@ export class CommunitiesService {
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>,
     @InjectModel(Follow.name)
     private followModel: SoftDeleteModel<FollowDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateCommunityDto, user: IUser) {
@@ -441,7 +444,6 @@ export class CommunitiesService {
     const group = await this.communityModel.findById(groupId);
     if (!group) throw new NotFoundException('Group not found');
 
-    // Convert members & invitedUsers sang string để so sánh
     const memberIds = group.members.map((id) => id.toString());
     const invitedIds = group.invitedUsers.map((id) => id.toString());
 
@@ -449,23 +451,22 @@ export class CommunitiesService {
       (id) => !memberIds.includes(id) && !invitedIds.includes(id),
     );
 
-    // Convert string → ObjectId trước khi push
-    group.invitedUsers.push(...newInvites.map((id) => new Types.ObjectId(id)));
+    if (newInvites.length === 0) return { message: 'No new invites' };
 
+    group.invitedUsers.push(...newInvites.map((id) => new Types.ObjectId(id)));
     await group.save();
 
-    // 🔥 QUERY LẠI GROUP MỚI NHẤT
-    const updatedGroup = await this.communityModel
-      .findById(groupId)
-      .populate('invitedUsers', '_id name avatar')
-      .populate('members', '_id name avatar')
-      .populate('admins', '_id name avatar')
-      .lean();
+    // 🔔 CREATE NOTIFICATION + SOCKET
+    for (const invitedUserId of newInvites) {
+      await this.notificationsService.createNotification({
+        userId: new Types.ObjectId(invitedUserId),
+        fromUserId: new Types.ObjectId(inviterId),
+        type: 'GROUP_INVITE',
+        groupId: new Types.ObjectId(groupId),
+      });
+    }
 
-    return {
-      message: 'Invited successfully',
-      data: updatedGroup,
-    };
+    return { message: 'Invited successfully' };
   }
 
   async getInvitedGroups(userId: string) {
@@ -504,5 +505,55 @@ export class CommunitiesService {
     await group.save();
 
     return { message: 'Invitation rejected' };
+  }
+
+  async pinPost(communityId: string, postId: string, requester: IUser) {
+    if (
+      !mongoose.Types.ObjectId.isValid(communityId) ||
+      !mongoose.Types.ObjectId.isValid(postId)
+    ) {
+      throw new BadRequestException('Id không hợp lệ');
+    }
+
+    const community = await this.communityModel.findById(communityId);
+    if (!community) throw new NotFoundException('Community không tồn tại');
+
+    // chỉ admin được pin
+    if (!community.admins.map(String).includes(String(requester._id))) {
+      throw new ForbiddenException('Bạn không có quyền pin bài viết');
+    }
+
+    const post = await this.postModel.findOne({
+      _id: postId,
+      communityId,
+      isDeleted: { $ne: true },
+    });
+
+    if (!post) throw new NotFoundException('Post không tồn tại');
+
+    post.isPinned = true;
+    post.pinnedAt = new Date();
+    await post.save();
+
+    return { message: 'Đã pin bài viết' };
+  }
+
+  async unpinPost(communityId: string, postId: string, requester: IUser) {
+    const community = await this.communityModel.findById(communityId);
+    if (!community) throw new NotFoundException('Community không tồn tại');
+
+    if (!community.admins.map(String).includes(String(requester._id))) {
+      throw new ForbiddenException('Bạn không có quyền');
+    }
+
+    await this.postModel.updateOne(
+      { _id: postId },
+      {
+        isPinned: false,
+        pinnedAt: null, // ✅ BẮT BUỘC
+      },
+    );
+
+    return { message: 'Đã bỏ pin bài viết' };
   }
 }

@@ -140,6 +140,7 @@ export class CommunitiesController {
   getMembersWithCommunityId(@Param('id') id: string, @User() user: IUser) {
     return this.communitiesService.getMembersWithCommunityId(id, user);
   }
+  /////////////////////////////////////////////
   @SkipCheckPermission()
   @ResponseMessage('Get friend community')
   @Get(':groupId/invite-friends')
@@ -173,9 +174,31 @@ export class CommunitiesController {
     return this.communitiesService.acceptInvite(user._id, groupId);
   }
   @SkipCheckPermission()
-  @ResponseMessage('Tu choi invite')
+  @ResponseMessage('Reject invite')
   @Post(':groupId/reject-invite')
   rejectInvite(@User() user: IUser, @Param('groupId') groupId: string) {
     return this.communitiesService.rejectInvite(user._id, groupId);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Pin post (admin)')
+  @SkipCheckPermission()
+  @Post(':id/posts/:postId/pin')
+  pinPost(
+    @Param('id') communityId: string,
+    @Param('postId') postId: string,
+    @User() user: IUser,
+  ) {
+    return this.communitiesService.pinPost(communityId, postId, user);
+  }
+  @SkipCheckPermission()
+  @ResponseMessage('Unpin post (admin)')
+  @SkipCheckPermission()
+  @Post(':id/posts/:postId/unpin')
+  unpinPost(
+    @Param('id') communityId: string,
+    @Param('postId') postId: string,
+    @User() user: IUser,
+  ) {
+    return this.communitiesService.unpinPost(communityId, postId, user);
   }
 }
