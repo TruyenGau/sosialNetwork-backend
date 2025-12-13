@@ -16,7 +16,7 @@ export class ChatService {
     @InjectModel(Room.name) private roomModel: Model<Room>,
     @InjectModel(Message.name) private messageModel: Model<Message>,
     @InjectModel(Follow.name) private followModel: Model<Follow>,
-  ) {}
+  ) { }
 
   async findPrivateRoom(userA: string, userB: string) {
     return this.roomModel.findOne({
@@ -208,27 +208,48 @@ export class ChatService {
 
   // chấp nhận tin nhắn chờ
   async acceptPendingRequest(roomId: string, userId: string) {
-    const room = await this.roomModel.findById(roomId);
-    if (!room) throw new NotFoundException('Room not found');
+    const room = await this.roomModel.findOne({
+      _id: new Types.ObjectId(roomId),
+      type: RoomType.PRIVATE,
+      isPending: true,
+      pendingFor: new Types.ObjectId(userId),
+    });
 
-    const pending = (room as any).pending || {};
-    delete pending[userId];
-    (room as any).pending = pending;
+    if (!room) {
+      throw new NotFoundException(
+        'Room pending không tồn tại hoặc đã được xử lý',
+      );
+    }
+    // Bỏ trạng thái pending
+    room.isPending = false;
+    room.pendingFor = null;
 
     await room.save();
+
     return { ok: true };
   }
 
   // từ chối tin nhắn chờ
   async rejectPendingRequest(roomId: string, userId: string) {
-    const room = await this.roomModel.findById(roomId);
-    if (!room) throw new NotFoundException('Room not found');
+    const room = await this.roomModel.findOne({
+      _id: new Types.ObjectId(roomId),
+      type: RoomType.PRIVATE,
+      isPending: true,
+      pendingFor: new Types.ObjectId(userId),
+    });
 
-    const pending = (room as any).pending || {};
-    delete pending[userId];
-    (room as any).pending = pending;
+    if (!room) {
+      throw new NotFoundException(
+        'Room pending không tồn tại hoặc đã được xử lý',
+      );
+    }
 
-    await room.save();
+    // Xoá tất cả message thuộc room này
+    await this.messageModel.deleteMany({ room: room._id });
+
+    // Xoá luôn room
+    await room.deleteOne();
+
     return { ok: true };
   }
 }
