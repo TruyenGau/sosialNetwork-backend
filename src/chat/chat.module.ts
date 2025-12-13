@@ -9,6 +9,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from 'src/users/users.module';
 import { Follow, FollowSchema } from 'src/follows/schemas/follow.schemas';
+import { NotificationGateway } from 'src/notifications/notifications.gateway';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { Follow, FollowSchema } from 'src/follows/schemas/follow.schemas';
     ]),
     UsersModule,
   ],
-  providers: [ChatGateway, ChatService],
+  providers: [ChatGateway, ChatService, NotificationGateway],
   controllers: [ChatController],
   exports: [ChatService],
 })

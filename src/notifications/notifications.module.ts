@@ -8,9 +8,11 @@ import {
   Notification,
 } from './schemas/notification.schemas';
 import { NotificationsController } from './notifications.controller';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
+    JwtModule.register({}),
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
     ]),

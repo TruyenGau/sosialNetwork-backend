@@ -13,72 +13,118 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
+import { NotificationGateway } from 'src/notifications/notifications.gateway';
 
-@WebSocketGateway({ namespace: '/chat', cors: { origin: '*' } })
+@WebSocketGateway({
+  namespace: '/chat',
+  cors: { origin: '*' },
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server;
+  @WebSocketServer()
+  server: Server;
 
+  // userId -> set socketIds (đa tab)
   private userSockets = new Map<string, Set<string>>();
+
+  // userId -> roomId đang active
+  private activeRooms = new Map<string, string | null>();
 
   constructor(
     private chatService: ChatService,
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
+    private notificationGateway: NotificationGateway,
   ) {}
 
+  // ================= CONNECT =================
   async handleConnection(socket: Socket) {
     try {
-      const auth = socket.handshake.auth || {};
-      let token = auth.token || '';
-      if (!token) throw new UnauthorizedException('Token required');
-      if (token.startsWith('Bearer ')) token = token.slice(7);
+      let token = socket.handshake.auth?.token;
+      if (!token) throw new UnauthorizedException();
+
+      if (token.startsWith('Bearer ')) {
+        token = token.slice(7);
+      }
 
       const payload: any = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_ACCESS_TOKEN'),
       });
 
-      const userId = payload._id;
-      if (!userId) throw new UnauthorizedException('Invalid token');
+      const userId = payload?._id;
+      if (!userId) throw new UnauthorizedException();
 
-      const set = this.userSockets.get(userId) || new Set<string>();
+      // lưu socket
+      const set = this.userSockets.get(userId) ?? new Set<string>();
       set.add(socket.id);
       this.userSockets.set(userId, set);
 
       (socket as any).userId = userId;
 
-      console.log(`Socket connected: ${socket.id} user:${userId}`);
-
-      // 🔵 USER ONLINE
       await this.usersService.setOnline(userId, true);
+
+      console.log(`💬 Chat connected ${socket.id} user:${userId}`);
     } catch (err) {
-      console.log('Socket auth failed:', err.message);
       socket.disconnect(true);
     }
   }
 
+  // ================= DISCONNECT =================
   async handleDisconnect(socket: Socket) {
     const userId = (socket as any).userId;
     if (!userId) return;
 
     const set = this.userSockets.get(userId);
-    if (set) {
-      set.delete(socket.id);
+    if (!set) return;
 
-      if (set.size === 0) {
-        // Không còn tab / socket nào của user này nữa → OFFLINE
-        this.userSockets.delete(userId);
-        await this.usersService.setOnline(userId, false);
-      } else {
-        this.userSockets.set(userId, set);
-      }
+    set.delete(socket.id);
+
+    if (set.size === 0) {
+      this.userSockets.delete(userId);
+      this.activeRooms.delete(userId);
+      await this.usersService.setOnline(userId, false);
     }
 
-    console.log(`Socket disconnected: ${socket.id} user:${userId}`);
+    console.log(`💬 Chat disconnected ${socket.id} user:${userId}`);
   }
 
+  // ================= JOIN PRIVATE ROOM =================
+  @SubscribeMessage('join_private')
+  async joinPrivate(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: { roomId: string },
+  ) {
+    const userId = (socket as any).userId;
+    if (!userId || !body?.roomId) return;
+
+    await socket.join(body.roomId);
+
+    this.activeRooms.set(userId, body.roomId);
+
+    console.log(`👥 User ${userId} joined private room ${body.roomId}`);
+  }
+
+  // ================= LEAVE ROOM =================
+  @SubscribeMessage('leave_room')
+  leaveRoom(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: { roomId?: string },
+  ) {
+    const userId = (socket as any).userId;
+    if (!userId) return;
+
+    if (body?.roomId) {
+      socket.leave(body.roomId);
+    }
+
+    this.activeRooms.set(userId, null);
+
+    console.log(`🚪 User ${userId} left room ${body?.roomId}`);
+  }
+
+  // ================= PRIVATE MESSAGE =================
   @SubscribeMessage('send_message')
-  async onSendMessage(
+  async sendPrivateMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody()
     body: {
@@ -88,79 +134,61 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
   ) {
     const senderId = (socket as any).userId;
-    if (!senderId || !body.receiverId || !body.content) {
-      return socket.emit('error', {
-        message: 'receiverId and content required',
-      });
-    }
+    if (!senderId || !body.receiverId || !body.content) return;
 
     const room = await this.chatService.createOrGetPrivateRoom(
       senderId,
       body.receiverId,
     );
-    const messageType = body.type || 'text';
 
-    const savedMessage = await this.chatService.saveMessage(
-      senderId,
-      room._id.toString(),
-      {
-        type: messageType,
-        content: body.content,
-      },
-    );
+    const roomId = room._id.toString();
 
-    await socket.join(room._id.toString());
-    this.server.to(room._id.toString()).emit('receive_message', savedMessage);
+    const savedMessage = await this.chatService.saveMessage(senderId, roomId, {
+      type: body.type ?? 'text',
+      content: body.content,
+    });
 
-    const receiverSockets = this.userSockets.get(body.receiverId);
-    if (receiverSockets) {
-      receiverSockets.forEach((sid) => {
-        this.server.to(sid).emit('new_message_notification', {
-          roomId: room._id.toString(),
-          senderId,
-          message: savedMessage,
-        });
+    // 🔴 realtime
+    this.server.to(roomId).emit('receive_message', savedMessage);
+
+    // 🔔 notification (CHỈ khi receiver KHÔNG ở room)
+    const receiverActiveRoom = this.activeRooms.get(body.receiverId);
+
+    if (receiverActiveRoom !== roomId) {
+      this.notificationGateway.sendNotification(body.receiverId, {
+        type: 'CHAT_PRIVATE',
+        roomId,
+        senderId,
+        content: savedMessage.content,
+        createdAt: savedMessage.createdAt,
       });
     }
   }
 
+  // ================= JOIN GROUP =================
   @SubscribeMessage('join_group')
-  async onJoinGroup(
+  async joinGroup(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: { roomId: string },
   ) {
     const userId = (socket as any).userId;
-    if (!userId || !body.roomId)
-      return socket.emit('error', { message: 'roomId required' });
+    if (!userId || !body.roomId) return;
 
     const room = await this.chatService.findRoomById(body.roomId);
-    if (!room) return socket.emit('error', { message: 'Room not found' });
+    if (!room) return;
 
-    const isMember = room.members.some((m) => m._id.toString() === userId);
-    if (!isMember)
-      return socket.emit('error', { message: 'You are not a member' });
+    if (!room.members.some((m) => m._id.toString() === userId)) return;
 
     await socket.join(body.roomId);
-    socket.emit('joined_group', { roomId: body.roomId });
 
-    room.members.forEach((m) => {
-      if (m._id.toString() !== userId) {
-        const memberSockets = this.userSockets.get(m._id.toString());
-        if (memberSockets) {
-          memberSockets.forEach((sid) => {
-            this.server
-              .to(sid)
-              .emit('user_joined_group', { roomId: body.roomId, userId });
-          });
-        }
-      }
-    });
+    this.activeRooms.set(userId, body.roomId);
 
     console.log(`👥 User ${userId} joined group ${body.roomId}`);
   }
 
+  // ================= GROUP MESSAGE =================
   @SubscribeMessage('send_group_message')
-  async onSendGroupMessage(
+  async sendGroupMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody()
     body: {
@@ -170,54 +198,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
   ) {
     const senderId = (socket as any).userId;
-    if (!senderId || !body.roomId || !body.content) {
-      return socket.emit('error', { message: 'roomId and content required' });
-    }
+    if (!senderId || !body.roomId || !body.content) return;
 
     const room = await this.chatService.findRoomById(body.roomId);
-    if (!room) return socket.emit('error', { message: 'Room not found' });
+    if (!room) return;
 
-    const isMember = room.members.some((m) => m._id.toString() === senderId);
-    if (!isMember)
-      return socket.emit('error', { message: 'You are not a member' });
-
-    const messageType = body.type || 'text';
     const savedMessage = await this.chatService.saveMessage(
       senderId,
       body.roomId,
       {
-        type: messageType,
+        type: body.type ?? 'text',
         content: body.content,
       },
     );
 
-    room.members.forEach((m) => {
-      const memberSockets = this.userSockets.get(m._id.toString());
-      if (memberSockets) {
-        memberSockets.forEach((sid) => {
-          this.server.to(sid).emit('receive_group_message', savedMessage);
-        });
-      }
-    });
+    // 🔴 realtime
+    this.server.to(body.roomId).emit('receive_group_message', savedMessage);
 
+    // 🔔 notification
     room.members.forEach((m) => {
       const memberId = m._id.toString();
-      if (memberId !== senderId) {
-        const memberSockets = this.userSockets.get(memberId);
-        if (memberSockets) {
-          memberSockets.forEach((sid) => {
-            this.server.to(sid).emit('new_group_message_notification', {
-              roomId: body.roomId,
-              senderId,
-              content: body.content,
-            });
-          });
-        }
-      }
+      if (memberId === senderId) return;
+
+      const activeRoom = this.activeRooms.get(memberId);
+      if (activeRoom === body.roomId) return;
+
+      this.notificationGateway.sendNotification(memberId, {
+        type: 'CHAT_GROUP',
+        roomId: body.roomId,
+        senderId,
+        content: body.content,
+        createdAt: savedMessage.createdAt,
+      });
     });
-
-    socket.emit('receive_group_message', savedMessage);
-
-    console.log(`💬 [Group ${body.roomId}] ${senderId}: ${body.content}`);
   }
 }
